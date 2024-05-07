@@ -5,7 +5,8 @@ namespace Compiler;
 public static class Program
 {
 
-    public static bool debugMode = false;
+    public static bool Debug_PrintAst { get; private set; }
+
 
     public static int Main(string[] args)
     {
@@ -35,8 +36,21 @@ public static class Program
                     i++;
                 }
 
-                else
-                    pathsToCompile.Add(args[i][1 .. ^1]);
+                else if (args[i] == "-d")
+                {
+                    if (args.Length < i+1) return 1;
+
+                    switch(args[i+1].ToLower())
+                    {
+                        case "ast": Debug_PrintAst = true; break;
+
+                        default: return 1;
+                    }
+
+                    i++;
+                }
+
+                else pathsToCompile.Add(args[i][1 .. ^1]);
             }
 
             CodeProcess.Build([.. pathsToCompile], outputPath, outputFileName);

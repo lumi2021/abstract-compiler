@@ -5,15 +5,24 @@ The steps of the entire proccess to finish the compiler
 ### external
 [ ] console program help
 
-### main
-[ ] lexing
-    [ ] tokenization
+### lexing
+[X] lexing
+    [X] tokenization
 
-[ ] syntax parsing
+### parsing
+[X] syntax parsing
+    [X] syntax DEBUGGING
+
 [ ] evaluation
+    [ ] variable checking
+    [ ] stack size counter
+    [ ] scoped stack size counter
+    [ ] if/else labeling
+    [ ] ast to abstracted instructions
+    [ ] optimizations
 
+### compiling
 [ ] compiling
-    [ ] syntax structure to nasm
-    [ ] nasm optimizations
+    [ ] abstracted instructions to nasm
 
 [ ] compiled program running

@@ -6,9 +6,8 @@ This document is used as an guide and chan be changed with the time.
 # Program example
 ```
 using namespace MyProgram
-/*
-    This is my program :)
-*/
+# This is my program :) #
+
 
 func void Start()
 {
@@ -21,8 +20,8 @@ func void Start()
     foo = 255
     Std.Print("Now, foo is %d and bar is %d!\n", foo, bar)
 
-    // assemby x86 code :O
-    asm jmp MyProgram.GoodBye?
+    # preprocessed inline assemby x86 code :O
+    asm jmp GoodBye()
 }
 
 func void GoodBye()
