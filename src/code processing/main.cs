@@ -16,6 +16,21 @@ public static class CodeProcess
         
         Console.WriteLine("Starting build...");
 
+        // check if all sources exists
+        bool breakBuild = false;
+        foreach (var i in toCompile)
+        {
+            // check if file exists
+            if (!File.Exists(i))
+            {
+                Console.WriteLine($"Error! {Path.GetFullPath(i)} don't exist on the disk!");
+                breakBuild = true;
+            }
+
+        }
+        if (breakBuild) Environment.Exit(1);
+
+        // build
         foreach (var i in toCompile)
         {
             // check if file exists
@@ -33,7 +48,7 @@ public static class CodeProcess
 
                 Compilator.Compile(program, outputDir, outputFile);
             }
-        
+
         }
 
         Console.WriteLine("Build finished successfully!");

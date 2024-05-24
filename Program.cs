@@ -1,4 +1,5 @@
-﻿using Compiler.CodeProcessing;
+﻿using System.Diagnostics;
+using Compiler.CodeProcessing;
 
 namespace Compiler;
 
@@ -10,6 +11,7 @@ public static class Program
 
     public static int Main(string[] args)
     {
+        Debug();
 
         if (args.Length < 1)
         {
@@ -70,6 +72,13 @@ public static class Program
         Console.WriteLine("Compier options:");
         Console.WriteLine("\t- compile; Compile the project");
 
+    }
+
+    private static void Debug()
+    {
+        Debug_PrintAst = true;
+        CodeProcess.Build(["../../../test-code/main.ab"], "../../../test-code/bin", "main.asm");
+        Environment.Exit(0);
     }
 
 }

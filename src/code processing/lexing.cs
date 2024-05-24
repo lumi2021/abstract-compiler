@@ -23,9 +23,14 @@ public static class Lexer
 
     private static Dictionary<string, TokenType> _keyword2TokenMap = new()
     {
+        { "namespace", TokenType.NamespaceKeyword },
+        { "using", TokenType.UsingKeyword },
+
         { "let", TokenType.LetKeyword },
         { "const", TokenType.ConstKeyword },
         { "func", TokenType.FuncKeyword },
+
+        { "return", TokenType.ReturnKeyword },
         { "asm", TokenType.AsmKeyword },
 
         // values
@@ -41,7 +46,7 @@ public static class Lexer
         { "i16", TokenType.TypeKeyword },   { "ui16", TokenType.TypeKeyword },
         { "i32", TokenType.TypeKeyword },   { "ui32", TokenType.TypeKeyword },
         { "i64", TokenType.TypeKeyword },   { "ui64", TokenType.TypeKeyword },
-        { "i128", TokenType.TypeKeyword },  { "ui128", TokenType.TypeKeyword },
+        // { "i128", TokenType.TypeKeyword },  { "ui128", TokenType.TypeKeyword },
 
         { "f32", TokenType.TypeKeyword },   { "float", TokenType.TypeKeyword },
         { "f64", TokenType.TypeKeyword },   { "double", TokenType.TypeKeyword },
@@ -52,51 +57,49 @@ public static class Lexer
 
     };
 
-    private static Token Tokenize(string value, TokenType type)
-        => new() { type = type, value = value };
+    private static Token Tokenize(string value, TokenType type, int start, int end)
+        => new() { type = type, value = value, start = start, end = end > 0 ? end : start+1 };
+
+    private static Token Tokenize(char value, TokenType type, int start)
+        => Tokenize("" + value, type, start, -1);
 
     public static Token[] Parse(string sourceCode)
     {
         List<Token> tokens = [];
-        List<char> src = [.. sourceCode.ToCharArray()];
 
-        while (src.Count > 0)
+        for (var i = 0; i < sourceCode.Length; i++)
         {
-            char c = src[0];
+            char c = sourceCode[i];
 
             // Check if it's skipable
-            if (c == ' ' | c == '\r' | c == '\t') { src.Shift(); continue; }
+            if (c == ' ' | c == '\r' | c == '\t') { continue; }
 
             else if (c == '\n')
-            {
-                src.Shift();
-                tokens.Add(Tokenize("\\n", TokenType.LineFeed));
-            }
+                tokens.Add(Tokenize("\\n", TokenType.LineFeed, i, -1));
             else if (c == '(')
-                tokens.Add(Tokenize(src.Shift(), TokenType.LeftPerenthesisChar));
+                tokens.Add(Tokenize(c, TokenType.LeftPerenthesisChar, i));
             else if (c == ')')
-                tokens.Add(Tokenize(src.Shift(), TokenType.RightParenthesisChar));
+                tokens.Add(Tokenize(c, TokenType.RightParenthesisChar, i));
             else if (c == '{')
-                tokens.Add(Tokenize(src.Shift(), TokenType.LeftBracketChar));
+                tokens.Add(Tokenize(c, TokenType.LeftBracketChar, i));
             else if (c == '}')
-                tokens.Add(Tokenize(src.Shift(), TokenType.RighBracketChar));
+                tokens.Add(Tokenize(c, TokenType.RighBracketChar, i));
 
             else if (c == '+')
-                tokens.Add(Tokenize(src.Shift(), TokenType.CrossChar));
+                tokens.Add(Tokenize(c, TokenType.CrossChar, i));
             else if (c == '-')
-                tokens.Add(Tokenize(src.Shift(), TokenType.MinusChar));
+                tokens.Add(Tokenize(c, TokenType.MinusChar, i));
             else if (c == '*')
-                tokens.Add(Tokenize(src.Shift(), TokenType.StarChar));
+                tokens.Add(Tokenize(c, TokenType.StarChar, i));
             else if (c == '/')
-                tokens.Add(Tokenize(src.Shift(), TokenType.SlashChar));
+                tokens.Add(Tokenize(c, TokenType.SlashChar, i));
             else if (c == '%')
-                tokens.Add(Tokenize(src.Shift(), TokenType.PercentChar));
+                tokens.Add(Tokenize(c, TokenType.PercentChar, i));
             else if (c == '=')
 
-                tokens.Add(Tokenize(src.Shift(), TokenType.EqualsChar));
+                tokens.Add(Tokenize(c, TokenType.EqualsChar, i));
             else if (c == ',')
-                tokens.Add(Tokenize(src.Shift(), TokenType.CommaChar));
-
+                tokens.Add(Tokenize(c, TokenType.CommaChar, i));
 
             else 
             {
@@ -107,11 +110,14 @@ public static class Lexer
 
                     string num = "";
 
-                    while (src.Count > 0 && char.IsDigit(src[0]))
-                        num += src.Shift();
+                    int j = i;
+                    for ( ; sourceCode.Length > j && char.IsDigit(sourceCode[j]); j++)
+                        num += sourceCode[j];
 
-                    tokens.Add(Tokenize(num, TokenType.NumberValue));
+                    tokens.Add(Tokenize(num, TokenType.NumberValue, i, j));
 
+                    i = j-1;
+                    
                 }
                 
                 // Build identifier token
@@ -120,31 +126,62 @@ public static class Lexer
 
                     string token = "";
 
-                    while (src.Count > 0 && char.IsLetterOrDigit(src[0]))
-                    {
-                        token += src.Shift();
-                    }
+                    int j = i;
+                    for ( ; sourceCode.Length > j && char.IsLetterOrDigit(sourceCode[j]); j++)
+                        token += sourceCode[j];
 
                     if (_keyword2TokenMap.TryGetValue(token, out var type))
-                        tokens.Add(Tokenize(token, type));
+                        tokens.Add(Tokenize(token, type, i, j));
                     
-                    else tokens.Add(Tokenize(token, TokenType.Identifier));
+                    else tokens.Add(Tokenize(token, TokenType.Identifier, i, j));
+
+                    i = j-1;
 
                 }
 
+                // Build string token
+                else if (c == '"')
+                {
+                    string token = "";
+
+                    int j = i+1;
+                    for ( ; sourceCode.Length > j && sourceCode[j] != '"'; j++)
+                        token += sourceCode[j];
+                    
+                    tokens.Add(Tokenize(token, TokenType.StringLiteralValue, i, j));
+
+                    i = j+1;
+                }
+
+                // Igonore comments
+                else if (c == '#')
+                {
+                    if (sourceCode.Length > i+3 && sourceCode[i .. (i+3)] == "###")
+                    {
+                        i+=3;
+                        while(sourceCode.Length > i+3 && sourceCode[i .. (i+3)] != "###") i++;
+                        i+=3;
+                    }
+                    else
+                    {
+                        i++;
+                        while(sourceCode.Length > i+1 && (sourceCode[i] != '#' && sourceCode[i] != '\n')) i++;
+                        if (sourceCode[i] == '#') i++;
+                    }
+                }
 
                 // unrecognized character
                 else
                 {
                     Console.WriteLine($"Error! unrecognized chracter: c");
-                    src.Shift();
+                    continue;
                 }
             
             }
-
+        
         }
 
-        tokens.Add(Tokenize("\\EOF", TokenType.EOFChar));
+        tokens.Add(Tokenize("\\EOF", TokenType.EOFChar, sourceCode.Length, -1));
 
         VerifyEndOfStatements(tokens);
 
@@ -209,6 +246,9 @@ public struct Token {
     public string value;
     public TokenType type;
 
+    public int start;
+    public int end;
+
     public override readonly string ToString() => $"{value} ({type});";
     public readonly string ValueString()
         => type switch
@@ -221,13 +261,17 @@ public struct Token {
 
 public enum TokenType {
     NumberValue,
+    StringLiteralValue,
     Identifier,
 
+    NamespaceKeyword,       // namespace
+    UsingKeyword,           // using
     TypeKeyword,
     LetKeyword,             // let
     ConstKeyword,           // const
     FuncKeyword,            // func
 
+    ReturnKeyword,          // return
     AsmKeyword,             // asm
 
     NullKeyword,            // null

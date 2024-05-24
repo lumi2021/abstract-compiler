@@ -25,6 +25,7 @@ public static class Parser
 
     private static bool IsEOF(this Token token) => token.type == TokenType.EOFChar;
     private static Token Current() => tokens[0];
+    private static Token Next(int offset = 1) => tokens[0 + offset];
     private static Token Eat() => tokens.Shift();
     private static Token Expect(TokenType expectType, string errorMsg = "")
     {
@@ -32,7 +33,7 @@ public static class Parser
 
         if (tkn.type != expectType)
         {
-            Console.WriteLine(errorMsg);
+            Console.WriteLine($"{errorMsg} ({tkn}, {tkn.start} - {tkn.end})");
             Environment.Exit(1);
         }
         
@@ -48,10 +49,30 @@ public static class Parser
             TokenType.ConstKeyword => ParseVariableDeclaration(),
             TokenType.FuncKeyword => ParseMethodDeclaration(),
 
+            TokenType.NamespaceKeyword => ParseNamespaceDeclaration(),
+
+            TokenType.ReturnKeyword => ParseReturnStatement(),
             TokenType.AsmKeyword => ParseInlineAsm(),
 
             _ => ParseExpression(),
         };
+    }
+
+    private static NamespaceNode ParseNamespaceDeclaration()
+    {
+        Eat();
+
+        var name = Expect(TokenType.Identifier, "Identifiex expected when declaring an namespace!").ValueString();
+
+        var scope = ParseScope();
+
+        var namespaceNode = new NamespaceNode()
+        {
+            name = new(name),
+            namespaceScope = scope
+        };
+
+        return namespaceNode;
     }
 
     private static VariableDeclarationNode ParseVariableDeclaration()
@@ -72,7 +93,7 @@ public static class Parser
         return new()
         {
             isConstant = isConstant,
-            identifier = identifier,
+            identifier = new(identifier),
             value = value,
             type = type
         };
@@ -93,7 +114,7 @@ public static class Parser
         return new()
         {
             returnType = returnType,
-            name = identifier,
+            name = new(identifier),
             parameters = parameters,
             methodScope = scope
         };
@@ -107,6 +128,8 @@ public static class Parser
 
         while (true)
         {
+            if (Current().type == TokenType.RightParenthesisChar) break;
+
             TypeNode type = ParseType();
             string identifier = Expect(TokenType.Identifier, $"Identifier expected after type in parameter declaratioon!").value;
             
@@ -145,6 +168,18 @@ public static class Parser
         Expect(TokenType.RighBracketChar, "Expected '}' at the end of the scope!");
 
         return scope;
+    }
+    
+    private static ReturnStatementNode ParseReturnStatement()
+    {
+        Eat();
+        ExpressionNode? value = null;
+        if (Current().type != TokenType.LineFeed)
+            value = ParseExpression();
+        
+        return new() {
+            value = value
+        };
     }
     #endregion
 
@@ -239,13 +274,20 @@ public static class Parser
 
         switch(tkType)
         {
-            // Identifiers (variables)
+            // Identifiers
             case TokenType.Identifier:
-                return new IdentifierNode() { symbol = Eat().value };
+
+                if (Next().type == TokenType.LeftPerenthesisChar)
+                    return ParseMethodCall();
+                else return new IdentifierNode() { symbol = new(Eat().value) };
 
             // Constant/literal numeric values
             case TokenType.NumberValue:
                 return new NumericLiteralNode() { value = Double.Parse(Eat().value) };
+
+            // Constant/literal string values
+            case TokenType.StringLiteralValue:
+                return new StringLiteralNode() { value = Eat().value };
 
             // Null literal value
             case TokenType.NullKeyword:
@@ -259,9 +301,17 @@ public static class Parser
                 Expect(TokenType.RightParenthesisChar, $"Unexpected token! Expected Closing parenthesis.");
                 return val;
 
-
             default: throw new NotImplementedException($"{tkType}");
         }
+    }
+    
+    private static MethodCallNode ParseMethodCall()
+    {
+        var methodName = Eat();
+        Expect(TokenType.LeftPerenthesisChar, "Unexpected token! Expected oppening parenthesis!");
+        Expect(TokenType.RightParenthesisChar, "Unexpected token! Expected closing parenthesis!");
+
+        return new MethodCallNode() { target = new Identifier() { values = [methodName.value] } };
     }
     #endregion
 
@@ -376,6 +426,7 @@ public static class Parser
 
 }
 
+// FIXME don't sove equations
 public static class AstWriter
 {
 
@@ -394,7 +445,7 @@ public static class AstWriter
         if (!Directory.Exists(oPath))
             Directory.CreateDirectory(oPath);
         
-        File.WriteAllText(oPath + "/parsed-AST.txt", final.ToString());
+        File.WriteAllText(oPath + "/parsed-AST.txt", final.ToString().Replace("\r\n", "\n"));
     }
 
     
@@ -465,6 +516,17 @@ public static class AstWriter
             return str;
         }
 
+
+        else if (statement is NamespaceNode @nmspaceDec)
+        {
+            var str = "";
+            str += $"namespace {@nmspaceDec.name}";
+
+            str += '\n' + ProcessScope(@nmspaceDec.namespaceScope);
+
+            return str;
+        }
+
         else if (statement is AssemblyScopeNode @asmScp)
         {
             return ProcessAsmScope(@asmScp);
@@ -497,58 +559,64 @@ public static class AstWriter
         }
         else if (statement is ExpressionNode @exp)
         {
-            return ProcessExpression(@exp).ToString();
+            return ProcessExpression(@exp);
         }
 
-        return "<# undefined statement {statement.GetType().Name} #>";
+        return $"<# undefined statement {statement.GetType().Name} #>";
     }
 
-    private static double ProcessExpression(ExpressionNode expression)
+    private static string ProcessExpression(ExpressionNode expression)
     {
 
         if (expression is NumericLiteralNode @numericLiteral)
-        {
-            return @numericLiteral.value;
-        }
-        else if (expression is BinaryExpressionNode @binaryExp)
-        {
-            return OperateBinaryNode(@binaryExp);
-        }
-        else if (expression is UnaryExpressionNode @unaryExp)
-        {
-            return OperateUnaryNode(@unaryExp);
-        }
+            return @numericLiteral.value.ToString();
+        else if (expression is StringLiteralNode @stringLiteral)
+            return $"\"{@stringLiteral.value}\"";
         
-        else return 0.0;
+        else if (expression is BinaryExpressionNode @binaryExp)
+            return ProcessBinaryNode(@binaryExp);
+        else if (expression is UnaryExpressionNode @unaryExp)
+            return ProcessUnaryNode(@unaryExp);
+        
+        else if (expression is MethodCallNode @methodCall)
+            return @methodCall.ToString();
+        
+        else if (expression is IdentifierNode @identifier)
+            return @identifier.symbol.ToString();
+
+        else throw new NotImplementedException(expression.GetType().Name);
     }
 
-    private static double OperateBinaryNode(BinaryExpressionNode binaryExp)
+    private static string ProcessBinaryNode(BinaryExpressionNode binaryExp)
     {
 
         var left = ProcessExpression(binaryExp.leftStatement);
         var right = ProcessExpression(binaryExp.rightStatement);
 
-        var result = binaryExp.expOperator[0] switch
+        if (binaryExp.expOperator == "*"
+        || binaryExp.expOperator == "/"
+        || binaryExp.expOperator == "%")
         {
-            '+' => left + right,
-            '-' => left - right,
-            '*' => left * right,
-            '/' => left / right,
-            '%' => left % right,
+            if (binaryExp.leftStatement is BinaryExpressionNode @leftb &&
+            (@leftb.expOperator == "+" || @leftb.expOperator == "-"))
+                left = $"({left})";
+            
+            if (binaryExp.rightStatement is BinaryExpressionNode @rightb &&
+            (@rightb.expOperator == "+" || @rightb.expOperator == "-"))
+                right = $"({right})";
+            
+        }
 
-            _ => 0,
-        };
-
-        return result;
+        return $"{left} {binaryExp.expOperator} {right}";
     }
-    private static double OperateUnaryNode(UnaryExpressionNode unaryExp)
+    private static string ProcessUnaryNode(UnaryExpressionNode unaryExp)
     {
         return unaryExp.expOperator switch
         {
             "+" => ProcessExpression(unaryExp.expression),
-            "-" => -1 * ProcessExpression(unaryExp.expression),
+            "-" => "-" + ProcessExpression(unaryExp.expression),
 
-            _   => 0.0
+            _   => "NaN"
         };
     }
 

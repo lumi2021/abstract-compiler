@@ -1,4 +1,5 @@
-
+using System.Collections;
+using Compiler.CodeProcessing.CompilationStructuring;
 using Newtonsoft.Json;
 
 namespace Compiler.CodeProcessing.AbstractSyntaxTree.Nodes;
@@ -10,15 +11,20 @@ public class ScriptNode : ScopeNode
     public override string ToString() => JsonConvert.SerializeObject(this, Formatting.Indented);
 }
 
-public class NamespaceNode : ScopeNode
+public class NamespaceNode : StatementNode
 {
+    public Identifier name = new();
+    public ScopeNode namespaceScope = null!;
 }
 
-public class ScopeNode : StatementNode
+public class ScopeNode : StatementNode, IEnumerable<StatementNode>
 {
     public List<StatementNode> body = [];
 
     public override string ToString() => $"{{\n\t{string.Join("\n\t", body)}\n}}";
+
+    IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+    public IEnumerator<StatementNode> GetEnumerator() => body.GetEnumerator();
 }
 
 public class AssemblyScopeNode : StatementNode
@@ -29,16 +35,19 @@ public class AssemblyScopeNode : StatementNode
 public class MethodDeclarationNode : StatementNode
 {
     public TypeNode returnType = null!;
-    public string name = "";
+    public Identifier name = new();
     public ParametersListNode parameters = null!;
     public ScopeNode methodScope = null!;
 }
 
-public class ParametersListNode : StatementNode
+public class ParametersListNode : StatementNode, IEnumerable<ParameterNode>
 {
     public List<ParameterNode> parameters = [];
 
     public override string ToString() => string.Join(", ", parameters);
+
+    IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+    public IEnumerator<ParameterNode> GetEnumerator() => parameters.GetEnumerator();
 }
 public class ParameterNode : StatementNode
 {
@@ -52,16 +61,33 @@ public class VariableDeclarationNode : StatementNode
 {
     public bool isConstant = false;
     public TypeNode type = null!;
-    public string identifier = "";
+    public Identifier identifier = new();
     public ExpressionNode? value = null;
 
-    public override string ToString() => $"{type} {identifier}";
+    public override string ToString() => isConstant? "const" : "let" + $"{type} {identifier}";
 }
 
+public class LocalDeclarationNode : StatementNode
+{
+    public bool isConstant = false;
+    public TypeNode type = null!;
+    public LocalRef reference = new();
+    public ExpressionNode? value = null;
+
+    public override string ToString() => isConstant? "const" : "let" + $"{type} {reference}";
+}
+
+public class ReturnStatementNode : StatementNode
+{
+    public ExpressionNode? value = null;
+
+    public override string ToString() => $"return {value}";
+}
 
 
 public abstract class ExpressionNode : StatementNode
 {
+    public bool processed = false;
     public override string ToString() => $"{{ kind: {GetType().Name} }}";
 }
 
@@ -137,12 +163,46 @@ public class UnaryExpressionNode : ExpressionNode
     }
 }
 
-public class IdentifierNode : ExpressionNode
+
+public class IdentifierNode(int? local = null) : ExpressionNode
 {
 
-    public string symbol = "";
+    public bool isLocal = local != null; 
 
-    public override string ToString() => $"{symbol}";
+    public Identifier symbol = new();
+    public LocalRef localRef = (local == null) ? new() : new(local.Value);
+
+    public override string ToString() => isLocal ? $"{localRef}" : $"{symbol}";
+
+    public static bool operator ==(IdentifierNode left, IdentifierNode right) =>  left.Equals(right);
+    public static bool operator !=(IdentifierNode left, IdentifierNode right) => !left.Equals(right);
+
+    public override bool Equals(object? obj)
+    {
+        if (obj is IdentifierNode inode)
+        {
+            if (isLocal == inode.isLocal)
+            {
+                if (isLocal)
+                    return localRef == inode.localRef;
+                else
+                    return symbol == inode.symbol;
+            }
+        }
+
+        return false;
+    }
+    public override int GetHashCode() => base.GetHashCode();
+
+}
+
+public class MethodCallNode : ExpressionNode
+{
+
+    public Identifier target = new();
+    public List<ExpressionNode> parameters = [];
+
+    public override string ToString() => $"{target}({string.Join(", ", parameters)})";
 
 }
 
@@ -152,6 +212,15 @@ public class NumericLiteralNode : ExpressionNode
     public double value = 0.0;
 
     public override string ToString() => $"{value}";
+}
+
+public class StringLiteralNode : ExpressionNode
+{
+
+    public string value = "";
+
+    public override string ToString() => $"\"{value}\"";
+
 }
 
 public class NullLiteralNode : ExpressionNode
@@ -180,9 +249,47 @@ public class PrimitiveTypeNode : TypeNode
 }
 public class ComplexTypeNode : TypeNode
 {
-    string identifier = "";
+    //string identifier = "";
 }
 
+
+public struct Identifier(params string[] values)
+{
+    public List<string> values = [..values];
+    public bool isGlobal = false;
+
+    public CompStruct refersTo = null!;
+
+    public override string ToString() => string.Join('.', values);
+
+    public static bool operator ==(Identifier left, Identifier right) =>  left.Equals(right);
+    public static bool operator !=(Identifier left, Identifier right) => !left.Equals(right);
+
+    public override bool Equals(object? obj)
+    {
+        if (obj is Identifier id)
+            return Enumerable.SequenceEqual(values, id.values);
+        else return false;
+    }
+    public override int GetHashCode() => base.GetHashCode();
+}
+public readonly struct LocalRef(int idx)
+{
+    public readonly int index = idx;
+
+    override public string ToString() => index >= 0 ? $"local.{index}" : $"arg.{Math.Abs(index)-1}";
+
+    public static bool operator ==(LocalRef left, LocalRef right) =>  left.Equals(right);
+    public static bool operator !=(LocalRef left, LocalRef right) => !left.Equals(right);
+
+    public override bool Equals(object? obj)
+    {
+        if (obj is LocalRef lref)
+            return index == lref.index;
+        else return false;
+    }
+    public override int GetHashCode() => base.GetHashCode();
+}
 
 /* #################################### */
 /* #### PRIMITIVE TYPES ENUMERATOR #### */
@@ -219,7 +326,7 @@ public enum PrimitiveType : byte
 
 }
 
-/* #### PRIMITIVE TYPES ENUMERATOR #### */
+/* #### INTERMEDIATE ASSEMBLY INSTRUCTIONS #### */
 public enum AssemblyInstruction : ushort
 {
     Undefined = 0,
