@@ -1,3 +1,4 @@
+using Compiler.CodeProcessing.AbstractSyntaxTree.Nodes;
 using Compiler.CodeProcessing.Compiling;
 using Compiler.CodeProcessing.Evaluating;
 using Compiler.CodeProcessing.Exeptions;
@@ -31,25 +32,25 @@ public static class CodeProcess
         if (breakBuild) Environment.Exit(1);
 
         // build
+        List<ScriptNode> scriptTrees = [];
         foreach (var i in toCompile)
         {
-            // check if file exists
-            if (File.Exists(i))
-            {
-                // send it content to be compiled
-                var tokens = Lexer.Parse(File.ReadAllText(i));
+            // send script content to the lexer
+            var tokens = Lexer.Parse(File.ReadAllText(i));
 
-                var program = Parser.ParseTokens(tokens);
+            // send tokens array to be parsed into AST
+            var program = Parser.ParseTokens(tokens);
 
-                if (Program.Debug_PrintAst)
-                    AstWriter.WriteAst(program, outputDir);
+            if (Program.Debug_PrintAst)
+                AstWriter.WriteAst(program, outputDir);
 
-                Evaluation.EvalSource(program);
-
-                Compilator.Compile(program, outputDir, outputFile);
-            }
-
+            scriptTrees.Add(program);
         }
+
+        // evaluate the entire project
+        var evaluated = Evaluation.EvalSource([.. scriptTrees]);
+
+        Compilator.Compile(evaluated, outputDir, outputFile);
 
         Console.WriteLine("Build finished successfully!");
 

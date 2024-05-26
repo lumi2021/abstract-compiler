@@ -64,7 +64,8 @@ public class VariableDeclarationNode : StatementNode
     public Identifier identifier = new();
     public ExpressionNode? value = null;
 
-    public override string ToString() => isConstant? "const" : "let" + $"{type} {identifier}";
+    public override string ToString() => isConstant? "const" : "let" + $" {type} {identifier}"
+    + (value != null ? $" = {value}" : "");
 }
 
 public class LocalDeclarationNode : StatementNode
@@ -164,13 +165,13 @@ public class UnaryExpressionNode : ExpressionNode
 }
 
 
-public class IdentifierNode(int? local = null) : ExpressionNode
+public class IdentifierNode(TypeItem? type = null, int? local = null) : ExpressionNode
 {
 
     public bool isLocal = local != null; 
 
     public Identifier symbol = new();
-    public LocalRef localRef = (local == null) ? new() : new(local.Value);
+    public LocalRef localRef = (local == null) ? new() : new(type!, local.Value);
 
     public override string ToString() => isLocal ? $"{localRef}" : $"{symbol}";
 
@@ -253,12 +254,13 @@ public class ComplexTypeNode : TypeNode
 }
 
 
-public struct Identifier(params string[] values)
+public struct Identifier(TypeItem refersToType, params string[] values)
 {
-    public List<string> values = [..values];
-    public bool isGlobal = false;
+    public readonly List<string> values = [..values];
+    public readonly bool isGlobal = false;
 
-    public CompStruct refersTo = null!;
+    public readonly TypeItem refersToType = refersToType;
+    public CompStruct refersTo;
 
     public override string ToString() => string.Join('.', values);
 
@@ -273,9 +275,11 @@ public struct Identifier(params string[] values)
     }
     public override int GetHashCode() => base.GetHashCode();
 }
-public readonly struct LocalRef(int idx)
+public readonly struct LocalRef(TypeItem refersToType, int idx)
 {
     public readonly int index = idx;
+
+    public readonly TypeItem refersToType = refersToType;
 
     override public string ToString() => index >= 0 ? $"local.{index}" : $"arg.{Math.Abs(index)-1}";
 

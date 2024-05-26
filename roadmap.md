@@ -14,15 +14,16 @@ The steps of the entire proccess to finish the compiler
     [X] syntax DEBUGGING
 
 [ ] evaluation
-    [ ] variable checking
-    [ ] stack size counter
-    [ ] scoped stack size counter
+    [x] variable checking
+    [x] stack size counter
+    [x] scoped stack size counter
     [ ] if/else labeling
-    [ ] ast to abstracted instructions
+    [x] ast to abstracted instructions
     [ ] optimizations
 
 ### compiling
 [ ] compiling
-    [ ] abstracted instructions to nasm
+    [x] abstracted instructions to nasm
+    [ ] all instructions being handled well
 
 [ ] compiled program running

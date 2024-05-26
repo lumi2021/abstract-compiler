@@ -68,7 +68,7 @@ public static class Parser
 
         var namespaceNode = new NamespaceNode()
         {
-            name = new(name),
+            name = new(null!, name),
             namespaceScope = scope
         };
 
@@ -93,7 +93,7 @@ public static class Parser
         return new()
         {
             isConstant = isConstant,
-            identifier = new(identifier),
+            identifier = new(null!, identifier),
             value = value,
             type = type
         };
@@ -114,7 +114,7 @@ public static class Parser
         return new()
         {
             returnType = returnType,
-            name = new(identifier),
+            name = new(null!, identifier),
             parameters = parameters,
             methodScope = scope
         };
@@ -279,7 +279,7 @@ public static class Parser
 
                 if (Next().type == TokenType.LeftPerenthesisChar)
                     return ParseMethodCall();
-                else return new IdentifierNode() { symbol = new(Eat().value) };
+                else return new IdentifierNode() { symbol = new(null!, Eat().value) };
 
             // Constant/literal numeric values
             case TokenType.NumberValue:
@@ -311,7 +311,7 @@ public static class Parser
         Expect(TokenType.LeftPerenthesisChar, "Unexpected token! Expected oppening parenthesis!");
         Expect(TokenType.RightParenthesisChar, "Unexpected token! Expected closing parenthesis!");
 
-        return new MethodCallNode() { target = new Identifier() { values = [methodName.value] } };
+        return new MethodCallNode() { target = new Identifier(null!, [methodName.value]) };
     }
     #endregion
 
@@ -426,7 +426,6 @@ public static class Parser
 
 }
 
-// FIXME don't sove equations
 public static class AstWriter
 {
 

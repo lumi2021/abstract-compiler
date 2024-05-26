@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using Compiler.CodeProcessing.AbstractSyntaxTree.Nodes;
 using Compiler.CodeProcessing.CompilationStructuring;
+using Compiler.CodeProcessing.IntermediateAssembyLanguage;
 
 namespace Compiler.CodeProcessing.Evaluating;
 
@@ -8,30 +9,29 @@ namespace Compiler.CodeProcessing.Evaluating;
 public static class Evaluation
 {
 
-    public static void EvalSource(ScriptNode script)
+    public static CompilationRoot EvalSource(ScriptNode[] scripts)
     {
-
-        // hehe time of do some mess :)
-
-        //Console.WriteLine(script);
 
         var compilation = new CompilationRoot(null!);
 
         List<NamespaceItem> allNamespaces = [];
         List<MethodItem> allMethods = [];
 
-        // foreach by the script 1° layer
-        foreach (var i in script.body)
+        // foreach by the scripts 1° layer
+        foreach (var script in scripts)
         {
-            if (i is NamespaceNode @namespace)
+            foreach (var i in script.body)
             {
-                var nnamespace = new ExplicitNamespaceItem(i, compilation)
-                { name = @namespace.name };
+                if (i is NamespaceNode @namespace)
+                {
+                    var nnamespace = new ExplicitNamespaceItem(i, compilation)
+                    { name = @namespace.name };
 
-                compilation.namespaces.Add(nnamespace);
-                allNamespaces.Add(nnamespace);
+                    compilation.namespaces.Add(nnamespace);
+                    allNamespaces.Add(nnamespace);
+                }
+                else Console.WriteLine("Node type " + i.GetType().Name + " found outside of a namespace!");
             }
-            else Console.WriteLine("Node type " + i.GetType().Name + " found outside of a namespace!");
         }
 
         // foreach by found namespaces and load methods and instructions
@@ -54,11 +54,11 @@ public static class Evaluation
                     foreach (var p in @method.parameters)
                     {
                         var parameter = new ParameterItem(p) {
-                           identifier = new([p.identifier])
+                           identifier = new(new PrimitiveTypeItem((p.type as PrimitiveTypeNode)!), [p.identifier])
                         };
 
                         if (p.type is PrimitiveTypeNode @primitive)
-                            parameter.type = new PrimitiveTypeItem(p, @primitive.value, @primitive.isArray);
+                            parameter.type = new PrimitiveTypeItem(@primitive, @primitive.value, @primitive.isArray);
 
                         methodItem.parameters.Add(parameter);
                     }
@@ -98,30 +98,28 @@ public static class Evaluation
             for (var i = 0; i < mt.parameters.Count; i++)
             {
                 var mParam = mt.parameters[i];
-                localVariables.Add(new(mParam.identifier, -(i+1)));
+                localVariables.Add(new(mParam.identifier, -(i+1), mParam.type));
             }
 
-            foreach (var lr in mt.instructions.ToArray())
+            foreach (var l in mt.codeStatements.ToArray())
             {
-                
-                var l = (lr as BaseInstructionItem)!.nodeReference;
 
                 if (l is ExpressionNode @exp)
-                    EvaluateExpressionIdentifiers(@exp, localVariables);
+                    EvaluateExpressionIdentifiers(@exp, mt.Parent, localVariables);
 
                 else if (l is VariableDeclarationNode @varDec)
                 {
                     var type = new PrimitiveTypeItem(@varDec.type, (@varDec.type as PrimitiveTypeNode)!.value);
-                    localVariables.Add(new(@varDec.identifier, localIndex++));
+                    localVariables.Add(new(@varDec.identifier, localIndex++, type));
                     mt.Alloc(type);
-                    var idx = mt.Del(lr);
+                    var idx = mt.Del(l);
 
                     if (@varDec.value != null)
                     {
 
                         var nAssigin = new AssiginmentExpressionNode()
                         {
-                            assigne = new IdentifierNode(localVariables.Count - 1),
+                            assigne = new IdentifierNode(type, localVariables.Count - 1),
                             value = @varDec.value
                         };
                         mt.InsertRaw(idx, nAssigin);
@@ -131,7 +129,7 @@ public static class Evaluation
                     {
                         var nAssigin = new AssiginmentExpressionNode()
                         {
-                            assigne = new IdentifierNode(localVariables.Count - 1),
+                            assigne = new IdentifierNode(type, localVariables.Count - 1),
                             value = DefaultValueOf(@varDec.type)
                         };
                         mt.InsertRaw(idx, nAssigin);
@@ -141,7 +139,7 @@ public static class Evaluation
                 else if (l is ReturnStatementNode @return)
                 {
                     if (@return.value != null)
-                        EvaluateExpressionIdentifiers(@return.value, localVariables);
+                        EvaluateExpressionIdentifiers(@return.value, mt.Parent, localVariables);
                 }
 
                 else throw new NotImplementedException(l.ToString());
@@ -153,6 +151,28 @@ public static class Evaluation
         Console.WriteLine("__________________________________________________");
         Console.WriteLine("##################### PASS 2 #####################\n");
         Console.WriteLine(compilation);
+
+        // compile into intermediate asm
+        foreach (var mt in allMethods)
+        {
+
+            foreach (var l in mt.codeStatements.ToArray())
+            {
+
+                var instructionsList = StatementToAsm(l);
+                foreach (var i in instructionsList)
+                    mt.Emit(i);
+                mt.compiled = true;
+
+            }
+
+        }
+
+        Console.WriteLine("__________________________________________________");
+        Console.WriteLine("##################### PASS 3 #####################\n");
+        Console.WriteLine(compilation);
+
+        return compilation;
 
     }
 
@@ -195,23 +215,23 @@ public static class Evaluation
         }
     }
 
-    private static void EvaluateExpressionIdentifiers(ExpressionNode exp, List<LocalVar> decVars)
+    private static void EvaluateExpressionIdentifiers(ExpressionNode exp, NamespaceItem? ns,  List<LocalVar> decVars)
     {
 
         if (exp is BinaryExpressionNode @binExp)
         {
-            EvaluateExpressionIdentifiers(@binExp.leftStatement, decVars);
-            EvaluateExpressionIdentifiers(@binExp.rightStatement, decVars);
+            EvaluateExpressionIdentifiers(@binExp.leftStatement, ns, decVars);
+            EvaluateExpressionIdentifiers(@binExp.rightStatement, ns, decVars);
         }
         else if (exp is UnaryExpressionNode @unExp)
         {
-            EvaluateExpressionIdentifiers(@unExp.expression, decVars);
+            EvaluateExpressionIdentifiers(@unExp.expression, ns, decVars);
         }
         
         else if (exp is AssiginmentExpressionNode @ass)
         {
-            EvaluateExpressionIdentifiers(@ass.assigne, decVars);
-            EvaluateExpressionIdentifiers(@ass.value, decVars);
+            EvaluateExpressionIdentifiers(@ass.assigne, ns, decVars);
+            EvaluateExpressionIdentifiers(@ass.value, ns, decVars);
         }
 
         else if (exp is IdentifierNode @ident)
@@ -225,10 +245,28 @@ public static class Evaluation
 
                     @ident.processed = true;
                     @ident.isLocal = true;
-                    @ident.localRef = new(decVars[idx].index);
+                    @ident.localRef = new(decVars[idx].type, decVars[idx].index);
 
                 }
                 else Console.WriteLine("a: " + @ident.symbol);
+
+            }
+        }
+
+        else if (exp is MethodCallNode @methodCall)
+        {
+            if (!@methodCall.processed)
+            {
+
+                Identifier methodName = @methodCall.target;
+                var method = ns!.methods.Find(m => m.name == methodName);
+
+                if (method != null)
+                {
+                    @methodCall.target = method.GetGlobalReference();
+                    @methodCall.target.refersTo = method;
+                    @methodCall.processed = true;
+                }
 
             }
         }
@@ -237,56 +275,105 @@ public static class Evaluation
 
     #endregion
 
-    private static void StatementToAsm(StatementNode stat, IEmitInsturction emitable)
+    #region AST to intermadiate Asm
+
+    private static IntermediateInstruction[] StatementToAsm(StatementNode stat)
     {
         
         // Emit an expression
-        if (stat is ExpressionNode)
+        if (stat is ExpressionNode @exp)
         {
-            
-            if (stat is BinaryExpressionNode @binaryExp)
-            {
-                StatementToAsm(@binaryExp.leftStatement, emitable);
-                StatementToAsm(@binaryExp.rightStatement, emitable);
-                
-                switch (@binaryExp.expOperator)
-                {
-                    case "+": emitable.Emit(Instruction.Add); break;
-                    case "-": emitable.Emit(Instruction.Sub); break;
-                    case "*": emitable.Emit(Instruction.Mul); break;
-                    case "/": emitable.Emit(Instruction.Div); break;
-                    case "%": emitable.Emit(Instruction.Rest); break;
-
-                }
-            }
-
-            else if (stat is IdentifierNode @identfier)
-                emitable.Emit(Instruction.GetField, @identfier.symbol.ToString());
-
-            else if (stat is NumericLiteralNode @numericLit)
-                emitable.Emit(Instruction.LdInt, @numericLit.value.ToString());
-
-            else if (stat is StringLiteralNode @stringLit)
-                emitable.Emit(Instruction.LdString, '"' + @stringLit.value + '"');
-            
-            else if (stat is AssiginmentExpressionNode @assigin)
-            {
-                StatementToAsm(@assigin.value, emitable);
-                emitable.Emit(Instruction.SetLocal, @assigin.assigne.ToString());
-            }
-            
-            else throw new NotImplementedException(stat.GetType().Name);
-        
+            return ExpressionToAsm(@exp);
         }
-        
-        else if (stat is VariableDeclarationNode @varDeclaration)
+        else if (stat is ReturnStatementNode @ret)
         {
-            throw new NotImplementedException();
+            IntermediateInstruction[] value = [];
+            if (@ret.value != null)
+                value = ExpressionToAsm(@ret.value);
+            
+            return [.. value, OpCode.Ret()];
         }
         
         else throw new NotImplementedException(stat.GetType().Name);
 
     }
+
+    private static IntermediateInstruction[] ExpressionToAsm(ExpressionNode exp, TypeItem? expectedType = null)
+    {
+        List<IntermediateInstruction> rist = [];
+
+        if (exp is BinaryExpressionNode @binaryExp)
+        {
+            rist.AddRange(ExpressionToAsm(@binaryExp.rightStatement));
+            rist.AddRange(ExpressionToAsm(@binaryExp.leftStatement));
+            
+            rist.Add(@binaryExp.expOperator switch
+            {
+                "+" => OpCode.Add(),
+                "-" => OpCode.Sub(),
+                "*" => OpCode.Mul(),
+                "/" => OpCode.Div(),
+                "%" => OpCode.Rest(),
+
+                _   => throw new NotSupportedException($"operator {@binaryExp.expOperator}")
+            });
+        }
+
+        else if (exp is IdentifierNode @identfier)
+        {
+            if (@identfier.isLocal)
+            {
+                rist.Add(OpCode.GetLocal(@identfier.localRef));
+            }
+        }
+
+        else if (exp is NumericLiteralNode @numericLit)
+        {
+            string IlTypeString = "i64";
+
+            if (expectedType != null && expectedType is PrimitiveTypeItem @pt)
+                IlTypeString = TypeAsILString(@pt.type);
+            
+            rist.Add(OpCode.LdConst_int(IlTypeString, (long)@numericLit.value));
+        }
+            
+        else if (exp is StringLiteralNode @stringLit)
+        {}
+            
+        else if (exp is AssiginmentExpressionNode @assigin)
+        {
+            List<IntermediateInstruction> assigneCode = [];
+            TypeItem assiginType = null!;
+
+            // process the assigne first and get the type
+            if (@assigin.assigne is IdentifierNode @targetId)
+            {
+                if (@targetId.isLocal)
+                {
+                    assigneCode.Add(OpCode.SetLocal(@targetId.localRef));
+                    assiginType = @targetId.localRef.refersToType;
+                }
+            }
+
+            // load the value on stack
+            rist.AddRange(ExpressionToAsm(@assigin.value, assiginType));
+
+            // set it into assigne
+            rist.AddRange(assigneCode);
+        }
+
+        else if (exp is MethodCallNode @mCall)
+        {
+            if (@mCall.target.refersTo is MethodItem @method)
+                rist.Add(OpCode.CallStatic(@method));
+        }
+
+        else throw new NotImplementedException(exp.GetType().Name);
+
+        return [.. rist];
+    }
+
+    #endregion
 
     /* temporary structs */
     private struct TempBinaryExp(string op)
@@ -297,9 +384,10 @@ public static class Evaluation
 
         public override string ToString() => $"{left} {op} {right}";
     }
-    private struct LocalVar(Identifier id, int index)
+    private struct LocalVar(Identifier id, int index, TypeItem type)
     {
         public Identifier identifier = id;
+        public TypeItem type = type;
         public int index = index;
     }
 
@@ -334,7 +422,33 @@ public static class Evaluation
 
         }
 
-        return 0;
+        throw new NotImplementedException();
+        //return 0;
+    }
+
+    public static string TypeAsILString(PrimitiveType t)
+    {
+        return t switch
+        {
+            PrimitiveType.Void => "void",
+            PrimitiveType.Integer_8 => "i8",
+            PrimitiveType.Integer_16 => "i16",
+            PrimitiveType.Integer_32 => "i32",
+            PrimitiveType.Integer_64 => "i64",
+            PrimitiveType.Integer_128 => "i128",
+            PrimitiveType.UnsignedInteger_8 => "u8",
+            PrimitiveType.UnsignedInteger_16 => "u16",
+            PrimitiveType.UnsignedInteger_32 => "u32",
+            PrimitiveType.UnsignedInteger_64 => "u64",
+            PrimitiveType.UnsignedInteger_128 => "u128",
+            PrimitiveType.Floating_32 => "f32",
+            PrimitiveType.Floating_64 => "f64",
+            PrimitiveType.Boolean => "bool",
+            PrimitiveType.Character => "char",
+            PrimitiveType.String => "str",
+
+            _ => throw new NotImplementedException($"{t}")
+        };
     }
 
     public static ExpressionNode DefaultValueOf(TypeNode type)
@@ -367,31 +481,4 @@ public static class Evaluation
         return null!;
     }
 
-}
-
-public enum Instruction : byte
-{
-    ______________________a,
-
-    Nop,
-
-    SetField,
-    SetLocal,
-
-    GetField,
-    GetLocal,
-
-    LdInt,
-    LdFloat,
-    LdBool,
-    LdString,
-
-    Add,
-    Sub,
-    Mul,
-    Div,
-    Rest,
-
-    Call,
-    Ret
 }

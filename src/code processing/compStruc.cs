@@ -1,18 +1,14 @@
 using System.Text;
 using Compiler.CodeProcessing.AbstractSyntaxTree.Nodes;
 using Compiler.CodeProcessing.Evaluating;
+using Compiler.CodeProcessing.IntermediateAssembyLanguage;
 
 namespace Compiler.CodeProcessing.CompilationStructuring;
 
-public interface IEmitInsturction
+public interface IReferenceable
 {
-    public void Emit(Instruction i, params string[] ps);
-    public int Del(InstructionItem target);
-
-    public void Alloc(TypeItem t);
-
-    public uint LocalMemorySize { get; } 
-    public List<TypeItem> LocalData { get; set;}
+    public Identifier GetGlobalReference();
+    public string GetGlobalReferenceAsString();
 }
 public abstract class CompStruct(StatementNode referTo, CompStruct? parent = null)
 {
@@ -75,9 +71,15 @@ public class CompilationRoot(StatementNode referTo) : CompStruct(referTo)
                 sb.Append($"stack size: {m.LocalMemorySize}B;");
                 sb.AppendLine();
 
-                foreach (var i in m.instructions)
+                if (!m.compiled)
                 {
-                    sb.AppendLine($"\t\t{i}");
+                    foreach (var i in m.codeStatements)
+                        sb.AppendLine($"\t\t{i}");
+                }
+                else
+                {
+                    foreach (var i in m.interLang)
+                        sb.AppendLine($"\t\t{i}");
                 }
 
                 sb.AppendLine("\t}");
@@ -90,7 +92,7 @@ public class CompilationRoot(StatementNode referTo) : CompStruct(referTo)
 
 }
 
-public abstract class NamespaceItem(StatementNode referTo, CompilationRoot parent) : CompStruct(referTo, parent)
+public abstract class NamespaceItem(StatementNode referTo, CompilationRoot parent) : CompStruct(referTo, parent), IReferenceable
 {
 
     public List<FieldItem> globalFields = [];
@@ -101,12 +103,17 @@ public abstract class NamespaceItem(StatementNode referTo, CompilationRoot paren
         get => _parent as CompilationRoot;
         set => _parent = value;
     }
+
+    public virtual Identifier GetGlobalReference() =>  new(null!, [$"{GetHashCode()}"]);
+    public string GetGlobalReferenceAsString() => string.Join('.', GetGlobalReference());
 }
 
 public class ImplicitNamespaceItem(StatementNode referTo, CompilationRoot parent) : NamespaceItem(referTo, parent) {}
 public class ExplicitNamespaceItem(StatementNode referTo, CompilationRoot parent) : NamespaceItem(referTo, parent)
 {
     public Identifier name = new();
+
+    public override Identifier GetGlobalReference() => new(null!, [.. name.values]);
 }
 
 
@@ -125,50 +132,65 @@ public class FieldItem(StatementNode referTo, CompStruct parent) : CompStruct(re
 
 } 
 
-public class MethodItem(StatementNode referTo, NamespaceItem parent) : CompStruct(referTo, parent), IEmitInsturction
+public class MethodItem(StatementNode referTo, NamespaceItem parent) : CompStruct(referTo, parent), IReferenceable
 {
 
     public TypeItem returnType = null!;
     public Identifier name = new();
     public List<ParameterItem> parameters = [];
     
-    public List<InstructionItem> instructions = [];
+    public List<StatementNode> codeStatements = [];
+    public List<IntermediateInstruction> interLang = [];
+    public bool compiled = false;
 
     public uint LocalMemorySize => (uint)LocalData.Select(a => (int)Evaluation.SizeOf(a)).Sum();
     public List<TypeItem> LocalData { get; set;} = [];
 
+    #region code dynamic modifiers
+
     public void InsertRaw(int index, StatementNode r)
     {
-        instructions.Insert(index, new BaseInstructionItem(r));
+        codeStatements.Insert(index, r);
     }
     public void AppendRaw(StatementNode r)
     {
-        instructions.Add(new BaseInstructionItem(r));
+        codeStatements.Add(r);
     }
-    
-    public void Emit(int index, Instruction inst, params string[] ps)
+        
+    public int Del(StatementNode target)
     {
-        instructions.Insert(index, new AsmInstructionItem(inst, ps));
-    }
-    public void Emit(Instruction inst, params string[] ps)
-    {
-        instructions.Add(new AsmInstructionItem(inst, ps));
-    }
-    
-    public int Del(InstructionItem target)
-    {
-        var idx = instructions.IndexOf(target);
-        instructions.RemoveAt(idx);
+        var idx = codeStatements.IndexOf(target);
+        codeStatements.RemoveAt(idx);
         return idx;
     }
 
     public void Alloc(TypeItem t) => LocalData.Add(t);
+
+    #endregion
+    #region compilation emitters
+
+    public void Emit(IntermediateInstruction instruction)
+    {
+        interLang.Add(instruction);
+    }
+    
+    #endregion
 
     public NamespaceItem? Parent
     {
         get => _parent as NamespaceItem;
         set => _parent = value;
     }
+
+    public Identifier GetGlobalReference()
+    {
+        List<string> path = [];
+        if (Parent != null) path.AddRange(Parent.GetGlobalReference().values);
+        path.AddRange(name.values);
+
+        return new(returnType, [.. path]);
+    }
+    public string GetGlobalReferenceAsString() => string.Join('.', GetGlobalReference());
 
 }
 
@@ -180,32 +202,23 @@ public class ParameterItem(StatementNode referTo) : CompStruct(referTo)
 
 
 public abstract class TypeItem(StatementNode referTo) : CompStruct(referTo) {}
-public class PrimitiveTypeItem(StatementNode referTo, PrimitiveType type, bool isArray = false) : TypeItem(referTo)
+public class PrimitiveTypeItem : TypeItem
 {
-    public PrimitiveType type = type;
-    public bool isArray = isArray;
+    public PrimitiveType type;
+    public bool isArray;
+
+    public PrimitiveTypeItem(StatementNode referTo, PrimitiveType type, bool isArray = false) : base(referTo)
+    {
+        this.type = type;
+        this.isArray = isArray;
+    }
+
+    public PrimitiveTypeItem(PrimitiveTypeNode baseType) : base(baseType)
+    {
+        this.type = baseType.value;
+        this.isArray = baseType.isArray;
+    }
 
     public override string ToString() => type.ToString();
-}
-
-
-public abstract class InstructionItem(StatementNode nodeRef = null!) : CompStruct(nodeRef)
-{
-    public IEmitInsturction? Parent
-    {
-        get => _parent as IEmitInsturction;
-        set => _parent = (CompStruct)value!;
-    }
-}
-public class BaseInstructionItem(StatementNode reference) : InstructionItem(reference)
-{
-    public override string ToString() => "RAW > " + nodeReference.ToString();
-}
-public class AsmInstructionItem(Instruction inst, params string[] ps) : InstructionItem
-{
-    public readonly Instruction instruction = inst;
-    public List<String> parameters = [.. ps];
-
-    public override string ToString() => $"{instruction} {string.Join(", ", parameters)}";
 }
 
