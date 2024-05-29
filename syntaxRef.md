@@ -3,117 +3,201 @@
 This document contains the basic syntax of the Abstract language.
 This document is used as an guide and chan be changed with the time.
 
+# General reference
+```
+
+# Single line comment
+
+###
+
+    Multiline comment
+
+###
+
+```
+
 # Program example
 ```
-using namespace MyProgram
+using Std
+
+namespace MyProgram {
 # This is my program :) #
 
+    func Start() { # 'func' is, as default, defined as PRIVATE
 
-func void Start()
-{
-    var byte foo = 10
-    var int bar = 30
+        let u8 foo = 10
+        let i32 bar = 30
 
-    Std.Print("Hello, World!\n")
-    Std.Print("Foo is %d and bar is %d.\n", foo, bar)
+        Std.Console.Out("Hello, World!\n")
+        Console.Out("Foo is %d and bar is %d.\n", foo, bar)
 
-    foo = 255
-    Std.Print("Now, foo is %d and bar is %d!\n", foo, bar)
+        foo = 2^8 - 1 #255
+        Console.Out("Now, foo is %d and bar is %d!\n", foo, bar)
 
-    # preprocessed inline assemby x86 code :O
-    asm jmp GoodBye()
-}
+        ###
+        #   ATTENTION!
+        #   Compiler is throwing a wanrning about the line bellow
+        #   as 256 will cause a overflow on the int8 (byte) type.
+        #   The code is still compilable, but foo will be 0.
+        ###
+        foo = 2^8 #256 (overflow)
 
-func void GoodBye()
-{
-    Std.Print("Goodbye, %s!\n", "World")
+        # preprocessed inline assemby x86 code :O
+        asm jmp GoodBye()
 
-    return 0
+    }
+
+    # Mathematical abstraction #
+    publicFunc i32 Square(i32 number) => number ^ 2
+    publicFunc i32 IsEven(i32 number) => number % 2 == 0
+    publicFunc i32 IsOdd(i32 number) => number % 2 != 0
+
+    privateFunc GoodBye() {
+
+        Console.Out("Goodbye, %s!\n", "World")
+        return
+
+    }
 }
 
 ```
 
 # Primitive data types
 ```
-### UNSIGNED INTEGERS ###
-# byte                  0 <=>           255
-# uint16                0 <=>        65.535
-# uint(32)              0 <=> 4.294.967.295
-# uint64                0 <=>         2e+64
-# uint128               0 <=>        2e+128
+### UNSIGNED INTEGERS (0 <>=> 256^n-1) ###
+# u8, byte  :               0 <=>    (255)
+# u16       :                0 <=>   256^2-1 (65,024)
+# u32       :                0 <=>   256^4-1 (4,228,250,625)
+# u64       :                0 <=>   256^8-1 (18,446E+15 ±)
+# u128 temporarily removed
 
-
-### SIGNED INTEGERS ###
-# syte               -127 <=>           127
-# int16           -32.767 <=>        32.767
-# int(32)  -2.147.483.647 <=> 2.147.483.647
-# int64            -2e+63 <=>        -2e+63
-# int128          -2e+127 <=>       -2e+127
+### SIGNED INTEGERS (irdk) ###
+# i8        :             -128 <=> 127
+# i16       :          -32,768 <=> 32,767
+# i32       :   -2,147,483,648 <=> 2,147,483,647
+# i64       : -9,223,372E+12 ± <=> ±9,223,372E+12 ±
+# i128 : temporarily removed
 
 
 ### FLOATING POINT NUMBERS ###
-# float        32b - precision x1
-# double       64b - precision x2
+# f32, float  : 4 bytes (32b) (precision x1)
+# f64, double : 8 bytes (64b) (precision x2)
 
 
 ### BOOLEANS ###
-bool           true or false
+bool : true(0) <=> false(!0)
 
 
 ### CHARACTERS AND STRINGS ###
-# char    - stores an character encoded as UTF-8
-# string  - immutable array of chars
-
+# char   : 4 bytes (32b) - stores an character encoded as UTF-8
+# string : dynamic       - immutable 'array' of bytes, encoded as UTF-8
 
 ### ARRAYS ###
 # to define arrays, you need to add "[]" after the
 # type declaration. e. g.:
+#> i8[], int16[], string[]         <- arrays with undefined length
+#> i8[8], int16[200], string[0]    <- arrays with length defined at comptime
 
-# byte[], int16[], string[]
+# to define multidimensional arrays (matrices), it's
+# used the comma character to separate the size of each
+# dimension. e. g.:
+#> i8[,], i16[,,], string[,]             <- matrices with undefined length
+#> i8[2,2], i16[8,,5], string[2,0]       <- matrices with at least one of it dimensions defined at comptime
+
+
+### REFERENCE AND POINTERS ###
+# in Abstract language ALL data types are sent as value in method
+# parameters or assiginments. To solve this problem and declarate a
+# data handler that needs to be an reference handler, it's used the
+# character '*' before the type. e. g.:
+#> *i8, *i16[], *void                   <- reference types
+
+# the '*' character anso is used before a pointer identifier to declarate
+# an assignment to the data being pointed.
+
+# to assigin some value to the data being referenciated, it's possible
+# just assigin the new data as it's done with the value data.
+
+let i8 myByte = 10
+let *i8 myByteRef
+*myByteRef = &myByte
+let myByteRef = 20
+# both 'myByte' and 'myByteRef' will now refer to 20
+
+
+# to manipulate the reference of a pointer or a variable, it's possible to
+# use the character '&' to read the data in simple variables and read-write
+# the data on other pointers.
+
+let i8 myByte = 10
+let *i8 myPtr1
+let *i8 myPtr2
+*myPtr1 = &myByte
+*myPtr2 = *myPtr1
+myPtr2 = 20
+# 'myByte', 'myPtr1' and 'myPtr2' will now refer to 20
 
 
 ### IN PRACTICE ###
-# to declare a variable, use the keyword var, the type and it identifier.
-# If you need, add an initial value
-var byte MyByte = 20
+# to declare a variable, use the keyword 'let', the type and it identifier.
+# If you need, add an initial value as follows:
+let i8  myByte
+let i16 myShort = 20
 
-# constants can be also defined with the keyword const
-const uint ConstantInteger = 0
+# constants can be also defined with the keyword 'const':
+const u32 ConstantInteger = 0
 
 ```
 
 # Logic
 ```
-// parenthesis are optional on if statements
-if x > 10 => return 0
-if (x > 11) => return 1
+### CONDITIONAL IF ###
+# using the 'if' keyword, is possible to define a conditional
+# point on the code. The if statement will evaluate a boolean
+# expression in front of it and execute what follows the '=>'
+# arrow operator.
+# the basic structure of the if conditional is:
+#> if [bool] => execute if true...
+# e. g.:
 
-/*
-    this block will not be compiled in the final
+let bool getCake = # insert here an dynamic value
+if getCake => Std.Console.Log("The cake is a lie!")
+
+###
+    this line will not be compiled into the final
     result due it's impossible to be true
-*/
-if (myByte > 255)
-{
-    // really long code here
+###
+if myByte > 255 => Std.Console.Log("The overflow is a lie!")
+
+### same with this line ###
+if false => Std.Console.Log("The boolean of Schrödinger")
+
+# more often, it's necessary to have more than one statement
+# inside of an conditional evaluator. In this case, it's possible
+# to use a code block '{ ... }' to get rid of the issue.
+
+if roundEarth => {
+    Std.Console.Log("Hmmm...")
+    Std.Console.Log("I really don't know why, but...")
+    Std.Console.Log("I think the earth is flat!")
 }
 
-# \/ implicit var declaration
-for byte i = 0; i < 10; i++
-{
-    i++
-}
+### CONDITIONAL ELIF/ELSE ###
+# in the case of needing to run some code if an if condition is
+# not true and, only, if it's not true, it's used the keyword
+# 'else' to run the desired statement or code block.
 
-foreach i in 10 => x++
-foreach i in myArray
-{
-    Std.Print(i)
-}
+if someBoolean => Std.Console.Log("This is true!")
+else => Std.Console.Log("This is false!")
 
-while (true) => break
-while true
-{
-    break
-}
+# if instead of a imple else, the code needs to evaluate another
+# condition if the first one is false, it's used the keyword 'elif'
+# as the same way as int the 'if' statement.
+
+if someBoolean1 => Std.Console.Log("This thing is true!")
+elif someBoolean2 => Std.Console.Log("These thing is true!")
+else => Std.Console.Log("Everything is false!")
+
 
 ```
 
