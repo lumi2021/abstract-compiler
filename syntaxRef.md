@@ -93,16 +93,16 @@ bool : true(0) <=> false(!0)
 # string : dynamic       - immutable 'array' of bytes, encoded as UTF-8
 
 ### ARRAYS ###
-# to define arrays, you need to add "[]" after the
+# to define arrays, you need to add "[]" before the
 # type declaration. e. g.:
-#> i8[], int16[], string[]         <- arrays with undefined length
-#> i8[8], int16[200], string[0]    <- arrays with length defined at comptime
+#> []i8, []int16, []string         <- arrays with undefined length
+#> [8]i8, [200]int16, [0]string    <- arrays with length defined at comptime
 
 # to define multidimensional arrays (matrices), it's
 # used the comma character to separate the size of each
 # dimension. e. g.:
-#> i8[,], i16[,,], string[,]             <- matrices with undefined length
-#> i8[2,2], i16[8,,5], string[2,0]       <- matrices with at least one of it dimensions defined at comptime
+#> [,]i8, [,,]i16, [,]string             <- matrices with undefined length
+#> [2,2]i8, [8,,5]i16, [2,0]string       <- matrices with at least one of it dimensions defined at comptime
 
 
 ### REFERENCE AND POINTERS ###
@@ -110,7 +110,7 @@ bool : true(0) <=> false(!0)
 # parameters or assiginments. To solve this problem and declarate a
 # data handler that needs to be an reference handler, it's used the
 # character '*' before the type. e. g.:
-#> *i8, *i16[], *void                   <- reference types
+#> *i8, *[]i16, []*i16, *void                   <- different reference types
 
 # the '*' character anso is used before a pointer identifier to declarate
 # an assignment to the data being pointed.
