@@ -1,14 +1,16 @@
 using System.Text;
 using Compiler.CodeProcessing.AbstractSyntaxTree.Nodes;
-using Compiler.CodeProcessing.Evaluating;
 using Compiler.CodeProcessing.IntermediateAssembyLanguage;
+using Compiler.CodeProcessing.Scripts;
+using Compiler.Util.Compilation;
 
 namespace Compiler.CodeProcessing.CompilationStructuring;
 
 public interface IReferenceable
 {
     public Identifier GetGlobalReference();
-    public string GetGlobalReferenceAsString();
+    public string GetGlobalReferenceAsm();
+    public string GetGlobalReferenceIL();
 }
 public abstract class CompStruct(StatementNode referTo, CompStruct? parent = null)
 {
@@ -27,8 +29,6 @@ public class CompilationRoot(StatementNode referTo) : CompStruct(referTo)
     public override string ToString()
     {
         var sb = new StringBuilder();
-
-        sb.AppendLine("Current compilation data:\n");
 
         sb.AppendLine($"### NAMESPACES ({namespaces.Count}): ###");
         foreach (var ns in namespaces)
@@ -59,11 +59,11 @@ public class CompilationRoot(StatementNode referTo) : CompStruct(referTo)
 
                 foreach (var mp in m.parameters)
                 {
-                    if (mp.type is PrimitiveTypeItem @pType)
-                        sb.Append($"{@pType.type} {mp.identifier}, ");
+                    if (mp.type is TypeItem @type)
+                        sb.Append($"{@type.Value} {mp.identifier}, ");
                 }
 
-                if (m.parameters.Count > 1) sb.Remove(sb.Length - 2, 2);
+                if (m.parameters.Count > 0) sb.Remove(sb.Length - 2, 2);
 
                 sb.AppendLine(") {");
 
@@ -85,18 +85,21 @@ public class CompilationRoot(StatementNode referTo) : CompStruct(referTo)
                 sb.AppendLine("\t}");
             }
 
+            sb.AppendLine();
+
         }
 
-        return sb.ToString().Replace("\t", "  ");
+        return sb.ToString();
     }
 
 }
 
-public abstract class NamespaceItem(StatementNode referTo, CompilationRoot parent) : CompStruct(referTo, parent), IReferenceable
+public abstract class NamespaceItem(StatementNode referTo, CompilationRoot parent, Script source) : CompStruct(referTo, parent), IReferenceable
 {
-
     public List<FieldItem> globalFields = [];
     public List<MethodItem> methods = [];
+
+    public Script ScriptSourceReference {get; private set;} = source;
     
     public CompilationRoot? Parent
     {
@@ -105,11 +108,12 @@ public abstract class NamespaceItem(StatementNode referTo, CompilationRoot paren
     }
 
     public virtual Identifier GetGlobalReference() =>  new(null!, [$"{GetHashCode()}"]);
-    public string GetGlobalReferenceAsString() => string.Join('.', GetGlobalReference());
+    public string GetGlobalReferenceAsm() => string.Join('.', GetGlobalReference());
+    public string GetGlobalReferenceIL() => string.Join('.', GetGlobalReference());
 }
 
-public class ImplicitNamespaceItem(StatementNode referTo, CompilationRoot parent) : NamespaceItem(referTo, parent) {}
-public class ExplicitNamespaceItem(StatementNode referTo, CompilationRoot parent) : NamespaceItem(referTo, parent)
+public class ImplicitNamespaceItem(Script source, StatementNode referTo, CompilationRoot parent) : NamespaceItem(referTo, parent, source) {}
+public class ExplicitNamespaceItem(Script source, StatementNode referTo, CompilationRoot parent) : NamespaceItem(referTo, parent, source)
 {
     public Identifier name = new();
 
@@ -143,8 +147,10 @@ public class MethodItem(StatementNode referTo, NamespaceItem parent) : CompStruc
     public List<IntermediateInstruction> interLang = [];
     public bool compiled = false;
 
-    public uint LocalMemorySize => (uint)LocalData.Select(a => (int)Evaluation.SizeOf(a)).Sum();
+    public uint LocalMemorySize => (uint)LocalData.Select(a => a.Value.Size).Sum();
     public List<TypeItem> LocalData { get; set;} = [];
+
+    public Script ScriptRef => Parent.ScriptSourceReference;
 
     #region code dynamic modifiers
 
@@ -176,9 +182,9 @@ public class MethodItem(StatementNode referTo, NamespaceItem parent) : CompStruc
     
     #endregion
 
-    public NamespaceItem? Parent
+    public NamespaceItem Parent
     {
-        get => _parent as NamespaceItem;
+        get => (_parent as NamespaceItem)!;
         set => _parent = value;
     }
 
@@ -190,7 +196,39 @@ public class MethodItem(StatementNode referTo, NamespaceItem parent) : CompStruc
 
         return new(returnType, [.. path]);
     }
-    public string GetGlobalReferenceAsString() => string.Join('.', GetGlobalReference());
+    
+    public string GetGlobalReferenceAsm()
+    {
+        List<string> path = [];
+        List<string> paramStrs = [];
+
+        if (Parent != null)
+            path.AddRange(Parent.GetGlobalReference().values);
+
+        path.AddRange(name.values);
+
+        foreach (var i in parameters)
+            paramStrs.Add(i.type.ToAsmString());
+
+        return string.Join(".", path) + '?' + string.Join('_', paramStrs);
+    }
+
+    public string GetGlobalReferenceIL()
+    {
+        List<string> nameSpace = [];
+        List<string> path = [];
+        List<string> paramStrs = [];
+
+        if (Parent != null)
+            nameSpace.AddRange(Parent.GetGlobalReference().values);
+
+        path.AddRange(name.values);
+
+        foreach (var i in parameters)
+            paramStrs.Add(i.type.ToAsmString());
+
+        return string.Join(".", nameSpace) + ':' + string.Join(".", path) + '?' + string.Join('_', paramStrs);
+    }
 
 }
 
@@ -200,25 +238,20 @@ public class ParameterItem(StatementNode referTo) : CompStruct(referTo)
     public Identifier identifier = new();
 }
 
-
-public abstract class TypeItem(StatementNode referTo) : CompStruct(referTo) {}
-public class PrimitiveTypeItem : TypeItem
+public class TypeItem : CompStruct
 {
-    public PrimitiveType type;
-    public bool isArray;
+    private readonly ILangType _type;
+    public ILangType Value => _type;
 
-    public PrimitiveTypeItem(StatementNode referTo, PrimitiveType type, bool isArray = false) : base(referTo)
+    public TypeItem(TypeNode referTo) : base(referTo)
     {
-        this.type = type;
-        this.isArray = isArray;
+        PrimitiveTypeNode refNode = (referTo as PrimitiveTypeNode)!;
+
+        ILangType t = new PrimitiveType(refNode.value, TypeDefKind.Value);
+
+        _type = t;
     }
 
-    public PrimitiveTypeItem(PrimitiveTypeNode baseType) : base(baseType)
-    {
-        this.type = baseType.value;
-        this.isArray = baseType.isArray;
-    }
-
-    public override string ToString() => type.ToString();
+    public override string ToString() => _type.ToString() ?? "null";
+    public string ToAsmString() => _type.ToIlString() ?? "nil";
 }
-

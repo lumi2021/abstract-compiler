@@ -1,16 +1,25 @@
 using System.Text;
+using Compiler.CodeProcessing.CompilationStructuring;
 
 namespace Compiler.Util.Compilation;
 
 public class NASMBuilder
 {
 
+    private readonly List<string> globals = [];
+    private readonly List<string> externs = [];
+
     private readonly List<NasmInstruction> instructions = [];
 
+    private readonly List<NasmData> dynamicData = [];
+    private readonly List<NasmData> readonlyData = [];
+
+    public void AppendExternLabel(string label) => externs.Add(label);
+    public void AppendGlobalLabel(string label) => globals.Add(label);
 
     public void Comment(string content)
     {
-        instructions.Add(new NasmInstruction("", "", content));
+        instructions.Add(new("", "", content));
     }
     public void LineFeed(int count = 1)
     {
@@ -23,36 +32,84 @@ public class NASMBuilder
         return new(this);
     }
 
+    public EIResult Enter(int size)
+    {
+        instructions.Add(new("", "ENTER", [$"0x{size:X}", "0x0"]));
+        return new(this);
+    }
+    public EIResult Leave()
+    {
+        instructions.Add(new("", "LEAVE", ""));
+        return new(this);
+    }
+
+    public EIResult Mov(Pointer target, long value)
+    {
+        instructions.Add(new("", "MOV", [target.ToString(), value > 0 ? $"0x{value:X}" : $"{value}"]));
+        return new(this);
+    }
+    public EIResult Mov(Pointer target, string value)
+    {
+        instructions.Add(new("", "MOV", [target.ToString(), value]));
+        return new(this);
+    }
     public EIResult Mov(Register target, long value)
     {
-        instructions.Add(new("", "MOV", target.ToString(), value > 0 ? $"0x{value:X}" : $"{value}"));
+        instructions.Add(new("", "MOV", [target.ToString(), value > 0 ? $"0x{value:X}" : $"{value}"]));
         return new(this);
     }
     public EIResult Mov(Register target, string value)
     {
-        instructions.Add(new("", "MOV", target.ToString(), value));
+        instructions.Add(new("", "MOV", [target.ToString(), value]));
         return new(this);
     }
 
     public EIResult Add(Register left, long right)
     {
-        instructions.Add(new("", "ADD", left.ToString(), right > 0 ? $"0x{right:X}" : $"{right}"));
+        instructions.Add(new("", "ADD", [left.ToString(), right > 0 ? $"0x{right:X}" : $"{right}"]));
         return new(this);
     }
     public EIResult Add(Register left, string right)
     {
-        instructions.Add(new("", "ADD", left.ToString(), right));
+        instructions.Add(new("", "ADD", [left.ToString(), right]));
         return new(this);
     }
     
     public EIResult Sub(Register left, long right)
     {
-        instructions.Add(new("", "SUB", left.ToString(), right > 0 ? $"0x{right:X}" : $"{right}"));
+        instructions.Add(new("", "SUB", [left.ToString(), right > 0 ? $"0x{right:X}" : $"{right}"]));
         return new(this);
     }
     public EIResult Sub(Register left, string right)
     {
-        instructions.Add(new("", "SUB", left.ToString(), right));
+        instructions.Add(new("", "SUB", [left.ToString(), right]));
+        return new(this);
+    }
+
+    public EIResult Pop(Register to)
+    {
+        instructions.Add(new("", "POP", [to.ToString()]));
+        return new(this);
+    }
+    public EIResult Push(Register from)
+    {
+        instructions.Add(new("", "PUSH", [from.ToString()]));
+        return new(this);
+    }
+    public EIResult Push(string from)
+    {
+        instructions.Add(new("", "PUSH", [from]));
+        return new(this);
+    }
+
+    public EIResult Call(string label)
+    {
+        instructions.Add(new("", "CALL", [label]));
+        return new(this);
+    }
+    public EIResult Call(MethodItem method)
+    {
+        instructions.Add(new("", "CALL", [method.GetGlobalReferenceAsm()]));
         return new(this);
     }
 
@@ -62,14 +119,61 @@ public class NASMBuilder
         return new(this);
     }
 
+    public EIResult AppendInstruction(string label, string inst, string[]? parameters)
+    {
+        instructions.Add(new(label, inst.ToUpper(), parameters ?? []));
+        return new(this);
+    }
+
+
+    public void DeclarateDynamicDataItem(string label, NASMDataSize size, params string[] data)
+        => dynamicData.Add(new(label, size, data));
+    public void DeclarateReadonlycDataItem(string label, NASMDataSize size, params string[] data)
+        => readonlyData.Add(new(label, size, data));
+
+    public void DeclarateDataLabel(string label)
+        => readonlyData.Add(new(label));
+
 
     public string Emit()
     {
         StringBuilder code = new();
 
+        if (globals.Count > 0) code.AppendLine($"global {string.Join(", ", globals)}");
+        if (externs.Count > 0) code.AppendLine($"extern {string.Join(", ", externs)}");
+
+        if (globals.Count > 0 || externs.Count > 0)
+            code.AppendLine();
+
+        code.AppendLine("section .text");
+        code.AppendLine("    _main: jmp MyProgram.Main?");
+        code.AppendLine();
+
         foreach (var instruction in instructions)
             code.AppendLine(instruction.ToString());
+        
+        code.AppendLine();
+        
+        if (dynamicData.Count > 0)
+        {
+            code.AppendLine("section .data");
 
+            foreach (var data in dynamicData)
+                code.AppendLine(data.ToString());
+            
+            code.AppendLine();
+        }
+
+        if (readonlyData.Count > 0)
+        {
+            code.AppendLine("section .rodata");
+
+            foreach (var data in readonlyData)
+                code.AppendLine(data.ToString());
+            
+            code.AppendLine();
+        }
+        
         return code.ToString();
     }
 
@@ -80,7 +184,7 @@ public class NASMBuilder
         public readonly string[] parameters;
         public readonly string comment;
 
-        public NasmInstruction(string inst, params string[] parameters)
+        public NasmInstruction(string inst, string[] parameters)
         {
             label = "";
             instruction = inst;
@@ -118,10 +222,70 @@ public class NASMBuilder
         }
 
         public override string ToString()
-            => (label.Trim() != "" ? $"{label.Trim()}:" : "")
-            + (instruction.Trim() != "" ? $"\t{instruction,-6}{string.Join(", ", parameters)}" : "")
-            .PadRight(comment.Trim() != "" ? 30 : 0)
-            + (comment.Trim() != "" ? $"; {comment}" : "");
+        {
+            var line = "";
+
+            if (label.Trim() != "")
+                line += label.Trim() + ':';
+            
+            if (instruction.Trim() != "")
+            {
+                line = line.PadRight(8);
+                line += instruction.Trim().ToUpper();
+
+                if (parameters.Length > 0)
+                {
+                    line = line.PadRight(16);
+                    line += ' ' + string.Join(", ", parameters);
+                }
+
+            }
+
+            if (comment.Trim() != "")
+            {
+                line = line.PadRight(48);
+                line += "; " + comment.Trim();
+            }
+
+            return line;
+        }
+    }
+    readonly struct NasmData (string label, NASMDataSize size = 0!, params string[] data)
+    {
+        public readonly string label = label;
+        public readonly bool onlyLabel = size == 0;
+        public readonly NASMDataSize size = size;
+        public readonly string[] data = data;
+
+        public override string ToString()
+        {
+            var line = "".PadRight(8);
+
+            if (label.Trim() != "")
+                line += label.Trim();
+
+            if (!onlyLabel)
+            {
+
+                line = line.PadRight(31) + ' ';
+                line += size switch {
+                    NASMDataSize.Byte  => "db",
+                    NASMDataSize.Word  => "dw",
+                    NASMDataSize.DWord => "dd",
+                    NASMDataSize.QWord => "dq",
+                    _ => "db"
+                };
+
+                line += "  ";
+
+                if (data.Length > 0)
+                    line += string.Join(", ", data);
+                else line += "0";
+
+            }
+
+            return line;
+        }
     }
 
     public readonly struct EIResult(NASMBuilder builder)
@@ -143,4 +307,21 @@ public readonly struct Register(string value)
 {
     private readonly string value = value;
     public override string ToString() => value;
+}
+public readonly struct Pointer(NASMDataSize size, string value)
+{
+    private readonly string value = value;
+    private readonly string size = size switch {
+        NASMDataSize.Byte => "BYTE", NASMDataSize.Word => "WORD", NASMDataSize.DWord => "DWORD",
+        NASMDataSize.QWord => "QWORD", _ => ""};
+
+    public override string ToString() => $"{size}[{value}]";
+}
+
+public enum NASMDataSize : byte
+{
+    Byte = 1,
+    Word = 2,
+    DWord = 4,
+    QWord = 8
 }

@@ -1,7 +1,10 @@
 using System.Security.Cryptography;
 using Compiler.CodeProcessing.AbstractSyntaxTree.Nodes;
 using Compiler.CodeProcessing.CompilationStructuring;
+using Compiler.CodeProcessing.Exeptions;
 using Compiler.CodeProcessing.IntermediateAssembyLanguage;
+using Compiler.CodeProcessing.Scripts;
+using Compiler.Util.Compilation;
 
 namespace Compiler.CodeProcessing.Evaluating;
 
@@ -9,13 +12,16 @@ namespace Compiler.CodeProcessing.Evaluating;
 public static class Evaluation
 {
 
+    private static List<NamespaceItem> allNamespaces = [];
+    private static List<MethodItem> allMethods = [];
+
     public static CompilationRoot EvalSource(ScriptNode[] scripts)
     {
 
-        var compilation = new CompilationRoot(null!);
+        allNamespaces = [];
+        allMethods = [];
 
-        List<NamespaceItem> allNamespaces = [];
-        List<MethodItem> allMethods = [];
+        var compilation = new CompilationRoot(null!);
 
         // foreach by the scripts 1° layer
         foreach (var script in scripts)
@@ -24,7 +30,7 @@ public static class Evaluation
             {
                 if (i is NamespaceNode @namespace)
                 {
-                    var nnamespace = new ExplicitNamespaceItem(i, compilation)
+                    var nnamespace = new ExplicitNamespaceItem(script.SourceReference, i, compilation)
                     { name = @namespace.name };
 
                     compilation.namespaces.Add(nnamespace);
@@ -49,16 +55,16 @@ public static class Evaluation
                     { name = @method.name };
 
                     if (@method.returnType is PrimitiveTypeNode @pt)
-                        methodItem.returnType = new PrimitiveTypeItem(@pt, @pt.value, @pt.isArray);
+                        methodItem.returnType = new TypeItem(@pt);
 
                     foreach (var p in @method.parameters)
                     {
                         var parameter = new ParameterItem(p) {
-                           identifier = new(new PrimitiveTypeItem((p.type as PrimitiveTypeNode)!), [p.identifier])
+                           identifier = new(new TypeItem(p.type), [p.identifier])
                         };
 
                         if (p.type is PrimitiveTypeNode @primitive)
-                            parameter.type = new PrimitiveTypeItem(@primitive, @primitive.value, @primitive.isArray);
+                            parameter.type = new TypeItem(@primitive);
 
                         methodItem.parameters.Add(parameter);
                     }
@@ -66,12 +72,7 @@ public static class Evaluation
                     foreach (var stat in @method.methodScope)
                     {
                         if (stat is AssiginmentExpressionNode @assigin)
-                        {
-                            if (@assigin.value is BinaryExpressionNode @right)
-                            {
-                                @assigin.value = ReduceBinaryExp(@right);
-                            }
-                        }
+                            @assigin.value = ReduceExpression(@assigin.value);
 
                         methodItem.AppendRaw(stat);
 
@@ -85,9 +86,7 @@ public static class Evaluation
 
         }
 
-        Console.WriteLine("__________________________________________________");
-        Console.WriteLine("##################### PASS 1 #####################\n");
-        Console.WriteLine(compilation);
+        WritePass(compilation, 1);
 
         // foreach by methods to verify identifiers
         foreach (var mt in allMethods)
@@ -109,7 +108,7 @@ public static class Evaluation
 
                 else if (l is VariableDeclarationNode @varDec)
                 {
-                    var type = new PrimitiveTypeItem(@varDec.type, (@varDec.type as PrimitiveTypeNode)!.value);
+                    var type = new TypeItem(@varDec.type);
                     localVariables.Add(new(@varDec.identifier, localIndex++, type));
                     mt.Alloc(type);
                     var idx = mt.Del(l);
@@ -130,7 +129,7 @@ public static class Evaluation
                         var nAssigin = new AssiginmentExpressionNode()
                         {
                             assigne = new IdentifierNode(type, localVariables.Count - 1),
-                            value = DefaultValueOf(@varDec.type)
+                            value = Typing.DefaultValueOf(((PrimitiveType)type.Value).Value)
                         };
                         mt.InsertRaw(idx, nAssigin);
                     }
@@ -142,15 +141,58 @@ public static class Evaluation
                         EvaluateExpressionIdentifiers(@return.value, mt.Parent, localVariables);
                 }
 
-                else throw new NotImplementedException(l.ToString());
+                else mt.ScriptRef.ThrowError(
+                    new InstructionProcessingNotImplementedException()
+                );
 
             }
 
         }
 
-        Console.WriteLine("__________________________________________________");
-        Console.WriteLine("##################### PASS 2 #####################\n");
-        Console.WriteLine(compilation);
+        // foreach to find basic errors
+        foreach (var mt in allMethods)
+        {
+            foreach (var l in mt.codeStatements.ToArray())
+            {
+                if (l is AssiginmentExpressionNode @ass)
+                {
+                    if (@ass.assigne is IdentifierNode @ident)
+                    {
+                        var referingType = (PrimitiveType)@ident.refersToType.Value;
+
+                        if (@ass.value is NumericLiteralNode @num)
+                        {
+                            
+                            double value = @num.value;
+
+                            // check for mismatch type
+                            var a = IsNumericType(referingType);
+                            Console.WriteLine(a);
+
+                            // check for overflow
+                            if (value < referingType.MinValue)
+                            {
+                                // FIXME
+                                Console.WriteLine($"Warning! the value {value} is lower than the minimum store capacity of an "
+                                + $"{referingType}. It will calse an overflow making the resultant value be {referingType.MaxValue}!");
+                                @num.value = referingType.MaxValue;
+                            }
+                            else if (value > referingType.MaxValue)
+                            {
+                                // FIXME
+                                Console.WriteLine($"Warning! the value {value} is greater than the maximum store capacity of an "
+                                + $"{referingType}. It will calsing an overflow making the resultant value be {referingType.MinValue}!");
+                                @num.value = referingType.MinValue;
+                            }
+                        }
+                        else EvaluateExpressionType(@ass.value);
+
+                    }
+                }
+            }
+        }
+
+        WritePass(compilation, 2);
 
         // compile into intermediate asm
         foreach (var mt in allMethods)
@@ -158,25 +200,38 @@ public static class Evaluation
 
             foreach (var l in mt.codeStatements.ToArray())
             {
+                try {
 
-                var instructionsList = StatementToAsm(l);
-                foreach (var i in instructionsList)
-                    mt.Emit(i);
-                mt.compiled = true;
+                    var instructionsList = StatementToAsm(l);
 
+                    foreach (var i in instructionsList)
+                        mt.Emit(i);
+
+                }
+                catch (BuildException ex) { mt.ScriptRef.ThrowError(ex); }
             }
+            mt.compiled = true;
 
         }
 
-        Console.WriteLine("__________________________________________________");
-        Console.WriteLine("##################### PASS 3 #####################\n");
-        Console.WriteLine(compilation);
+        WritePass(compilation, 3);
 
         return compilation;
 
     }
 
     #region helper methods
+
+    private static ExpressionNode ReduceExpression(ExpressionNode exp)
+    {
+        if (exp is BinaryExpressionNode @bin)
+            return ReduceBinaryExp(@bin);
+
+        else if (exp is MethodCallNode @call)
+            return ReduceMethodCall(@call);
+        
+        else return exp;
+    }
 
     private static ExpressionNode ReduceBinaryExp(BinaryExpressionNode exp)
     {
@@ -186,11 +241,8 @@ public static class Evaluation
             right = exp.rightStatement
         };
 
-        if (bop.left is BinaryExpressionNode @leftBin)
-            bop.left = ReduceBinaryExp(@leftBin);
-
-        if (bop.right is BinaryExpressionNode @rightBin)
-            bop.right = ReduceBinaryExp(@rightBin);
+        bop.left = ReduceExpression(bop.left);
+        bop.right = ReduceExpression(bop.right);
         
         if (bop.left is NumericLiteralNode @lnum && bop.right is NumericLiteralNode @rnum)
         {
@@ -213,6 +265,14 @@ public static class Evaluation
             exp.rightStatement = bop.right;
             return exp;
         }
+    }
+
+    private static MethodCallNode ReduceMethodCall(MethodCallNode call)
+    {
+        for(var i = 0; i < call.parameters.Count; i++)
+            call.parameters[i] = ReduceExpression(call.parameters[i]);
+        
+        return call;
     }
 
     private static void EvaluateExpressionIdentifiers(ExpressionNode exp, NamespaceItem? ns,  List<LocalVar> decVars)
@@ -246,6 +306,7 @@ public static class Evaluation
                     @ident.processed = true;
                     @ident.isLocal = true;
                     @ident.localRef = new(decVars[idx].type, decVars[idx].index);
+                    @ident.symbol.refersToType = decVars[idx].type;
 
                 }
                 else Console.WriteLine("a: " + @ident.symbol);
@@ -259,18 +320,106 @@ public static class Evaluation
             {
 
                 Identifier methodName = @methodCall.target;
-                var method = ns!.methods.Find(m => m.name == methodName);
+                var method = FindReferencedMethodAndOverloads(methodName, ns)[0];
 
                 if (method != null)
                 {
                     @methodCall.target = method.GetGlobalReference();
                     @methodCall.target.refersTo = method;
+
+                    foreach (var arg in @methodCall.parameters)
+                    {
+                        EvaluateExpressionIdentifiers(arg, ns, decVars);
+                    }
+
                     @methodCall.processed = true;
                 }
+                else Console.WriteLine($"Undefined Method \"{methodName}\"");
 
             }
         }
 
+        else if (
+            exp is StringLiteralNode ||
+            exp is BooleanLiteralNode ||
+            exp is NumericLiteralNode ||
+            exp is NullLiteralNode
+        ) return;
+
+        else throw new NotImplementedException($"{exp} ({exp.GetType().Name})");
+
+    }
+
+    private static TypeItem EvaluateExpressionType(ExpressionNode exp)
+    {
+        Console.WriteLine(exp.GetType().Name);
+        return null!;
+    }
+
+    private static bool IsNumericType(ILangType t)
+    {
+        if (t is PrimitiveType @p)
+        {
+            return @p.Value switch
+            {
+                PrimitiveTypeList.Integer_8 or
+                PrimitiveTypeList.Integer_16 or
+                PrimitiveTypeList.Integer_32 or
+                PrimitiveTypeList.Integer_64 or
+                PrimitiveTypeList.Integer_128 or
+                PrimitiveTypeList.UnsignedInteger_8 or
+                PrimitiveTypeList.UnsignedInteger_16 or
+                PrimitiveTypeList.UnsignedInteger_32 or
+                PrimitiveTypeList.UnsignedInteger_64 or
+                PrimitiveTypeList.UnsignedInteger_128 or
+                PrimitiveTypeList.Floating_32 or
+                PrimitiveTypeList.Floating_64 or
+                PrimitiveTypeList.__Generic__Number => true,
+
+                _ => false
+            };
+        }
+
+        return false;
+    }
+
+    private static MethodItem[] FindReferencedMethodAndOverloads(Identifier methodReference, NamespaceItem? rootNamespace)
+    {
+        if (rootNamespace == null) return [];
+
+        if (methodReference.Len == 1)
+        {
+            // search inside self namespace
+            var itens = rootNamespace.methods.Where(e => e.name == methodReference).ToArray();
+            if (itens.Length > 0) return itens;
+
+            // seatch inside usings
+        }
+
+        // search for a totally qualified name
+        var matchingNamespaces = allNamespaces.Where(e =>
+            e is ExplicitNamespaceItem exp
+            && methodReference.Len > exp.name.Len
+            && exp.name == new Identifier(null!, [.. methodReference.values[.. exp.name.Len]]))
+        .ToArray();
+
+        if (matchingNamespaces.Length > 0)
+        foreach (var ns in matchingNamespaces)
+        {
+            if (ns is ExplicitNamespaceItem @exp)
+            {
+                var localIdentfier = new Identifier(methodReference.refersToType, methodReference.values[@exp.name.Len]);
+
+                var itens = ns.methods.Where(e => e.name == localIdentfier).ToArray();
+                if (itens.Length > 0) return itens;
+            }
+
+            // TODO implecit namespaces
+
+        }
+
+
+        return [];
     }
 
     #endregion
@@ -294,7 +443,13 @@ public static class Evaluation
             return [.. value, OpCode.Ret()];
         }
         
-        else throw new NotImplementedException(stat.GetType().Name);
+        else if (stat is AssemblyScopeNode @asmScope)
+        {
+            Console.WriteLine("ignoring asm block lol");
+            return [];
+        }
+
+        else throw new InstructionProcessingNotImplementedException();
 
     }
 
@@ -331,15 +486,22 @@ public static class Evaluation
         {
             string IlTypeString = "i64";
 
-            if (expectedType != null && expectedType is PrimitiveTypeItem @pt)
-                IlTypeString = TypeAsILString(@pt.type);
+            if (expectedType != null && expectedType is TypeItem @pt)
+                IlTypeString = @pt.Value.ToIlString();
             
             rist.Add(OpCode.LdConst_int(IlTypeString, (long)@numericLit.value));
         }
             
         else if (exp is StringLiteralNode @stringLit)
-        {}
+        {
+            rist.Add(OpCode.LdConst_string(@stringLit.value));
+        }
             
+        else if (exp is BooleanLiteralNode @bool)
+        {
+            rist.Add(OpCode.LdConst_bool(@bool.value));
+        }
+
         else if (exp is AssiginmentExpressionNode @assigin)
         {
             List<IntermediateInstruction> assigneCode = [];
@@ -364,6 +526,9 @@ public static class Evaluation
 
         else if (exp is MethodCallNode @mCall)
         {
+            foreach (var i in @mCall.parameters)
+                rist.AddRange(ExpressionToAsm(i));
+
             if (@mCall.target.refersTo is MethodItem @method)
                 rist.Add(OpCode.CallStatic(@method));
         }
@@ -371,6 +536,22 @@ public static class Evaluation
         else throw new NotImplementedException(exp.GetType().Name);
 
         return [.. rist];
+    }
+
+    #endregion
+
+    #region Evaluator writer
+
+    public static void WritePass(CompilationRoot compilation, int pass)
+    {
+        if (!Program.Debug_PrintEval) return;
+
+        string outputDir = CodeProcess.OutputDirectory;
+
+        if (!Directory.Exists(outputDir + "/Evaluation/bin/evaluation/"))
+            Directory.CreateDirectory(outputDir + "/Evaluation/bin/evaluation/");
+        
+        File.WriteAllText(outputDir + $"/Evaluation/bin/evaluation/pass-{pass}.txt", compilation.ToString());
     }
 
     #endregion
@@ -389,96 +570,6 @@ public static class Evaluation
         public Identifier identifier = id;
         public TypeItem type = type;
         public int index = index;
-    }
-
-    public static ushort SizeOf(TypeItem type) => SizeOf((type.nodeReference as TypeNode)!);
-    public static ushort SizeOf(TypeNode type)
-    {
-        if (type is PrimitiveTypeNode pt)
-        {
-
-            return pt.value switch
-            {
-                PrimitiveType.Void                  => 0,
-
-                PrimitiveType.Character             or
-                PrimitiveType.Boolean               or
-                PrimitiveType.Integer_8             or
-                PrimitiveType.UnsignedInteger_8     => 1,
-
-                PrimitiveType.Integer_16            or
-                PrimitiveType.UnsignedInteger_16    => 2,
-
-                PrimitiveType.Integer_32            or
-                PrimitiveType.UnsignedInteger_32    or
-                PrimitiveType.Floating_32           => 4,
-
-                PrimitiveType.Integer_64            or
-                PrimitiveType.UnsignedInteger_64    or
-                PrimitiveType.Floating_64           => 8,
-
-                _ => throw new NotImplementedException()
-            };
-
-        }
-
-        throw new NotImplementedException();
-        //return 0;
-    }
-
-    public static string TypeAsILString(PrimitiveType t)
-    {
-        return t switch
-        {
-            PrimitiveType.Void => "void",
-            PrimitiveType.Integer_8 => "i8",
-            PrimitiveType.Integer_16 => "i16",
-            PrimitiveType.Integer_32 => "i32",
-            PrimitiveType.Integer_64 => "i64",
-            PrimitiveType.Integer_128 => "i128",
-            PrimitiveType.UnsignedInteger_8 => "u8",
-            PrimitiveType.UnsignedInteger_16 => "u16",
-            PrimitiveType.UnsignedInteger_32 => "u32",
-            PrimitiveType.UnsignedInteger_64 => "u64",
-            PrimitiveType.UnsignedInteger_128 => "u128",
-            PrimitiveType.Floating_32 => "f32",
-            PrimitiveType.Floating_64 => "f64",
-            PrimitiveType.Boolean => "bool",
-            PrimitiveType.Character => "char",
-            PrimitiveType.String => "str",
-
-            _ => throw new NotImplementedException($"{t}")
-        };
-    }
-
-    public static ExpressionNode DefaultValueOf(TypeNode type)
-    {
-        if (type is PrimitiveTypeNode pt)
-        {
-
-            return pt.value switch
-            {
-                PrimitiveType.Void                  => throw new NotImplementedException(),
-                PrimitiveType.Character             => throw new NotImplementedException(),
-                PrimitiveType.Boolean               => throw new NotImplementedException(),
-
-                PrimitiveType.Integer_8             or
-                PrimitiveType.UnsignedInteger_8     or
-                PrimitiveType.Integer_16            or
-                PrimitiveType.UnsignedInteger_16    or
-                PrimitiveType.Integer_32            or
-                PrimitiveType.UnsignedInteger_32    or
-                PrimitiveType.Floating_32           or
-                PrimitiveType.Integer_64            or
-                PrimitiveType.UnsignedInteger_64    or
-                PrimitiveType.Floating_64           => new NumericLiteralNode() { value = 0 },
-
-                _ => throw new NotImplementedException(type.ToString())
-            };
-
-        }
-
-        return null!;
     }
 
 }

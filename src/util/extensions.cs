@@ -17,4 +17,14 @@ public static class Extensions
         return "" + item;
     }
 
+
+    public static bool IsValidOnIdentifier(this char c)
+    {
+        return char.IsLetterOrDigit(c) || c == '_';
+    }
+    public static bool IsValidOnIdentifierStarter(this char c)
+    {
+        return char.IsLetter(c) || c == '_';
+    }
+
 }

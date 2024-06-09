@@ -1,9 +1,11 @@
-using System.Collections.Generic;
+using Compiler.CodeProcessing.Scripts;
 
 namespace Compiler.CodeProcessing.Lexing;
 
 public static class Lexer
 {
+    private static Script currentSrc = null!;
+
 
     private static readonly Dictionary<string, TokenType[]> lineJunctions = new()
     {
@@ -23,6 +25,7 @@ public static class Lexer
 
     private static Dictionary<string, TokenType> _keyword2TokenMap = new()
     {
+        // keywords
         { "namespace", TokenType.NamespaceKeyword },
         { "using", TokenType.UsingKeyword },
 
@@ -42,10 +45,10 @@ public static class Lexer
         { "void", TokenType.TypeKeyword },
 
                                             { "byte", TokenType.TypeKeyword },
-        { "i8", TokenType.TypeKeyword },    { "ui8", TokenType.TypeKeyword },
-        { "i16", TokenType.TypeKeyword },   { "ui16", TokenType.TypeKeyword },
-        { "i32", TokenType.TypeKeyword },   { "ui32", TokenType.TypeKeyword },
-        { "i64", TokenType.TypeKeyword },   { "ui64", TokenType.TypeKeyword },
+        { "i8", TokenType.TypeKeyword },    { "u8", TokenType.TypeKeyword },
+        { "i16", TokenType.TypeKeyword },   { "u16", TokenType.TypeKeyword },
+        { "i32", TokenType.TypeKeyword },   { "u32", TokenType.TypeKeyword },
+        { "i64", TokenType.TypeKeyword },   { "u64", TokenType.TypeKeyword },
         // { "i128", TokenType.TypeKeyword },  { "ui128", TokenType.TypeKeyword },
 
         { "f32", TokenType.TypeKeyword },   { "float", TokenType.TypeKeyword },
@@ -58,13 +61,16 @@ public static class Lexer
     };
 
     private static Token Tokenize(string value, TokenType type, int start, int end)
-        => new() { type = type, value = value, start = start, end = end > 0 ? end : start+1 };
+        => new() { type = type, value = value, start = start, end = end > 0 ? end : start+1, scriptRef = currentSrc};
 
     private static Token Tokenize(char value, TokenType type, int start)
         => Tokenize("" + value, type, start, -1);
 
-    public static Token[] Parse(string sourceCode)
+    public static Token[] Parse(Script source)
     {
+        currentSrc = source;
+
+        var sourceCode = source.Read();
         List<Token> tokens = [];
 
         for (var i = 0; i < sourceCode.Length; i++)
@@ -74,6 +80,7 @@ public static class Lexer
             // Check if it's skipable
             if (c == ' ' | c == '\r' | c == '\t') { continue; }
 
+            // Check single characters
             else if (c == '\n')
                 tokens.Add(Tokenize("\\n", TokenType.LineFeed, i, -1));
             else if (c == '(')
@@ -96,10 +103,15 @@ public static class Lexer
             else if (c == '%')
                 tokens.Add(Tokenize(c, TokenType.PercentChar, i));
             else if (c == '=')
-
                 tokens.Add(Tokenize(c, TokenType.EqualsChar, i));
+
+            else if (c == '&')
+                tokens.Add(Tokenize(c, TokenType.ComercialEChar, i));
+
             else if (c == ',')
                 tokens.Add(Tokenize(c, TokenType.CommaChar, i));
+            else if (c == '.')
+                tokens.Add(Tokenize(c, TokenType.DotChar, i));
 
             else 
             {
@@ -109,10 +121,33 @@ public static class Lexer
                 {
 
                     string num = "";
+                    byte numBase = 10;
+
+                    if (c == '0') // verify different bases
+                    {
+                        if (char.ToLower(sourceCode[i+1]) == 'x')
+                        {
+                            numBase = 16;
+                            i+=2;
+                        }
+                        if (char.ToLower(sourceCode[i+1]) == 'b')
+                        {
+                            numBase = 2;
+                            i+=2;
+                        }
+                    }
 
                     int j = i;
-                    for ( ; sourceCode.Length > j && char.IsDigit(sourceCode[j]); j++)
-                        num += sourceCode[j];
+                    for ( ; sourceCode.Length > j; j++)
+                    {
+                        char cc = sourceCode[j];
+
+                        if (numBase == 10 && !char.IsDigit(cc)) break;
+                        else if (numBase == 16 && !char.IsAsciiHexDigit(cc)) break;
+                        else if (numBase == 2 && (cc != '0' || cc != '1')) break;
+
+                        num += cc;
+                    }
 
                     tokens.Add(Tokenize(num, TokenType.NumberValue, i, j));
 
@@ -121,13 +156,13 @@ public static class Lexer
                 }
                 
                 // Build identifier token
-                else if (char.IsLetter(c))
+                else if (c.IsValidOnIdentifierStarter())
                 {
 
                     string token = "";
 
                     int j = i;
-                    for ( ; sourceCode.Length > j && char.IsLetterOrDigit(sourceCode[j]); j++)
+                    for ( ; sourceCode.Length > j && sourceCode[j].IsValidOnIdentifier(); j++)
                         token += sourceCode[j];
 
                     if (_keyword2TokenMap.TryGetValue(token, out var type))
@@ -173,17 +208,20 @@ public static class Lexer
                 // unrecognized character
                 else
                 {
-                    Console.WriteLine($"Error! unrecognized chracter: c");
+                    Console.WriteLine($"Error! unrecognized chracter: {c}");
                     continue;
                 }
             
             }
         
         }
+        sourceCode = "";
 
         tokens.Add(Tokenize("\\EOF", TokenType.EOFChar, sourceCode.Length, -1));
 
         VerifyEndOfStatements(tokens);
+        
+        currentSrc = null!;
 
         return [.. tokens];
     }
@@ -249,6 +287,8 @@ public struct Token {
     public int start;
     public int end;
 
+    public Script scriptRef;
+
     public override readonly string ToString() => $"{value} ({type});";
     public readonly string ValueString()
         => type switch
@@ -290,8 +330,10 @@ public enum TokenType {
     SlashChar,              // /
     PercentChar,            // %
     EqualsChar,             // =
+    ComercialEChar,         // &
 
     CommaChar,              // ,
+    DotChar,                // .
     EOFChar,                // \EOF
 
     LineFeed,               // \n

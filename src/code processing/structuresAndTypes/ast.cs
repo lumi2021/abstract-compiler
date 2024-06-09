@@ -1,13 +1,17 @@
 using System.Collections;
 using Compiler.CodeProcessing.CompilationStructuring;
+using Compiler.CodeProcessing.Lexing;
+using Compiler.CodeProcessing.Scripts;
+using Compiler.Util.Compilation;
 using Newtonsoft.Json;
 
 namespace Compiler.CodeProcessing.AbstractSyntaxTree.Nodes;
 
 public abstract class StatementNode {}
 
-public class ScriptNode : ScopeNode
+public class ScriptNode(Script srcr) : ScopeNode
 {
+    public Script SourceReference {get; private set;} = srcr;
     public override string ToString() => JsonConvert.SerializeObject(this, Formatting.Indented);
 }
 
@@ -149,12 +153,11 @@ public class BinaryExpressionNode : ExpressionNode
 public class UnaryExpressionNode : ExpressionNode
 {
     public ExpressionNode expression = null!;
-
-    public string expOperator = "";
+    public Token expOperator;
 
     public override string ToString()
     {
-        var str = $"{expOperator}";
+        var str = $"{expOperator.value}";
 
         if (expression is BinaryExpressionNode || expression is UnaryExpressionNode)
             str += $"({expression})";
@@ -172,6 +175,8 @@ public class IdentifierNode(TypeItem? type = null, int? local = null) : Expressi
 
     public Identifier symbol = new();
     public LocalRef localRef = (local == null) ? new() : new(type!, local.Value);
+
+    public TypeItem refersToType => isLocal ? localRef.refersToType : symbol.refersToType;
 
     public override string ToString() => isLocal ? $"{localRef}" : $"{symbol}";
 
@@ -224,6 +229,12 @@ public class StringLiteralNode : ExpressionNode
 
 }
 
+public class BooleanLiteralNode : ExpressionNode
+{
+    public bool value = false;
+    public override string ToString() => $"{value}";
+}
+
 public class NullLiteralNode : ExpressionNode
 {
     public override string ToString() => "null";
@@ -232,20 +243,23 @@ public class NullLiteralNode : ExpressionNode
 public class AssemblyExpressionNode : ExpressionNode
 {
     public AssemblyInstruction instruction = AssemblyInstruction.Undefined;
-    public List<string> arguments = [];
+    public List<ExpressionNode> arguments = [];
 
     public override string ToString() => $"{instruction.ToString().ToUpper()} {string.Join(", ", arguments)}";
 }
 
-
-public abstract class TypeNode : ExpressionNode
+public class ReferenceModifier : ExpressionNode
 {
-    public bool isArray = false;
+    public ExpressionNode expression = null!;
+    public Token modifier;
+
+    public override string ToString() => $"{modifier.value}{expression}";
 }
+
+public abstract class TypeNode : ExpressionNode {}
 public class PrimitiveTypeNode : TypeNode
 {
-    public PrimitiveType value = PrimitiveType.Void;
-
+    public PrimitiveTypeList value = PrimitiveTypeList.Void;
     override public string ToString() => $"{value}";
 }
 public class ComplexTypeNode : TypeNode
@@ -259,10 +273,12 @@ public struct Identifier(TypeItem refersToType, params string[] values)
     public readonly List<string> values = [..values];
     public readonly bool isGlobal = false;
 
-    public readonly TypeItem refersToType = refersToType;
+    public TypeItem refersToType = refersToType;
     public CompStruct refersTo;
 
-    public override string ToString() => string.Join('.', values);
+    public int Len => values.Count;
+
+    public override string ToString() => string.Join('.', values) ?? "nil";
 
     public static bool operator ==(Identifier left, Identifier right) =>  left.Equals(right);
     public static bool operator !=(Identifier left, Identifier right) => !left.Equals(right);
@@ -295,40 +311,6 @@ public readonly struct LocalRef(TypeItem refersToType, int idx)
     public override int GetHashCode() => base.GetHashCode();
 }
 
-/* #################################### */
-/* #### PRIMITIVE TYPES ENUMERATOR #### */
-public enum PrimitiveType : byte
-{
-    Void = 0,
-
-    // signed integers
-    Integer_8,
-    Integer_16,
-    Integer_32,
-    Integer_64,
-    Integer_128,
-
-    // unsigned integers
-    UnsignedInteger_8,
-    UnsignedInteger_16,
-    UnsignedInteger_32,
-    UnsignedInteger_64,
-    UnsignedInteger_128,
-
-    // floating point numbers
-    Floating_32,
-    Floating_64,
-    SinglePrecisionFloat = Floating_32,
-    DoublePrecisionFloat = Floating_64,
-
-    // boolean
-    Boolean,
-
-    // text
-    Character,
-    String,
-
-}
 
 /* #### INTERMEDIATE ASSEMBLY INSTRUCTIONS #### */
 public enum AssemblyInstruction : ushort
@@ -342,4 +324,10 @@ public enum AssemblyInstruction : ushort
     Sub,
     Mul,
     Div,
+
+    Call,
+
+    // pseudo-instructions
+    Extern, PseudoInstructionsStart = Extern,
+    
 }

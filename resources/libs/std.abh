@@ -1,0 +1,6 @@
+namespace Std.Console
+{
+
+    func void Log(i32 value)
+    
+}

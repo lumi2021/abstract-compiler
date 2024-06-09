@@ -1,25 +1,33 @@
 using System.Text;
 using Compiler.CodeProcessing.AbstractSyntaxTree.Nodes;
+using Compiler.CodeProcessing.CompilationStructuring;
+using Compiler.CodeProcessing.Exeptions;
 using Compiler.CodeProcessing.Lexing;
+using Compiler.CodeProcessing.Scripts;
+using Compiler.Util.Compilation;
 
 namespace Compiler.CodeProcessing.Parsing;
 
 public static class Parser
 {
+    private static Script currentSrc = null!;
     private static List<Token> tokens = [];
 
-    public static ScriptNode ParseTokens(Token[] source)
+    public static ScriptNode ParseTokens(Token[] source, Script srcRef)
     {
+        currentSrc = srcRef;
         tokens = [.. source];
 
-        var scriptNode = new ScriptNode();
+        var scriptNode = new ScriptNode(srcRef);
 
         while(!Current().IsEOF())
         {
             if (Current().type == TokenType.LineFeed) {Eat(); continue;}
-            scriptNode.body.Add(ParseStatement());
+            var stat = ParseStatement();
+            if (stat != null) scriptNode.body.Add(stat);
         }
 
+        currentSrc = null!;
         return scriptNode;
     }
 
@@ -41,7 +49,7 @@ public static class Parser
     }
 
     #region Statements parsing
-    private static StatementNode ParseStatement()
+    private static StatementNode? ParseStatement()
     {
         return Current().type switch
         {
@@ -62,13 +70,13 @@ public static class Parser
     {
         Eat();
 
-        var name = Expect(TokenType.Identifier, "Identifiex expected when declaring an namespace!").ValueString();
+        var name = ParseSymbol();
 
         var scope = ParseScope();
 
         var namespaceNode = new NamespaceNode()
         {
-            name = new(null!, name),
+            name = name,
             namespaceScope = scope
         };
 
@@ -107,7 +115,10 @@ public static class Parser
     
         var parameters = ParseMethodParameters();
 
-        var scope = ParseScope();
+        ScopeNode scope = null!;
+
+        if (currentSrc is not HeaderScript)
+            scope = ParseScope();
 
         Expect(TokenType.LineFeed, "Statement must be ended after a Method Declaration!");
 
@@ -116,7 +127,7 @@ public static class Parser
             returnType = returnType,
             name = new(null!, identifier),
             parameters = parameters,
-            methodScope = scope
+            methodScope = scope ?? new()
         };
     }
     
@@ -162,7 +173,8 @@ public static class Parser
             if (Current().type == TokenType.LineFeed) {Eat(); continue;}
             if (Current().IsEOF()) Expect(TokenType.RighBracketChar, $"Expected '}}' at the end of the scope!");
 
-            scope.body.Add(ParseStatement());
+            var stat = ParseStatement();
+            if (stat != null) scope.body.Add(stat);
         }
 
         Expect(TokenType.RighBracketChar, "Expected '}' at the end of the scope!");
@@ -256,7 +268,7 @@ public static class Parser
 
             return new UnaryExpressionNode()
             {
-                expOperator = Eat().value,
+                expOperator = Eat(),
                 expression = ParsePrimaryExpression()
             };
 
@@ -264,22 +276,30 @@ public static class Parser
         else if ("*/%".Contains(v))
             Expect(TokenType.MinusChar, $"Invalid unary operator {v}!");
 
+        else if (Current().type == TokenType.ComercialEChar)
+        {
+            return new ReferenceModifier()
+            {
+                modifier = Eat(),
+                expression = ParseUnaryExpression()
+            };
+        }
 
         return ParsePrimaryExpression();
     }
 
     private static ExpressionNode ParsePrimaryExpression()
     {
-        var tkType = Current().type;
+        var tk = Current();
 
-        switch(tkType)
+        switch(tk.type)
         {
             // Identifiers
             case TokenType.Identifier:
-
-                if (Next().type == TokenType.LeftPerenthesisChar)
-                    return ParseMethodCall();
-                else return new IdentifierNode() { symbol = new(null!, Eat().value) };
+                var symbol = ParseSymbol();
+                if (Current().type == TokenType.LeftPerenthesisChar)
+                    return ParseMethodCall(symbol); 
+                else return new IdentifierNode() { symbol = symbol };
 
             // Constant/literal numeric values
             case TokenType.NumberValue:
@@ -288,6 +308,11 @@ public static class Parser
             // Constant/literal string values
             case TokenType.StringLiteralValue:
                 return new StringLiteralNode() { value = Eat().value };
+            
+            // Constant/literal boolean values
+            case TokenType.TrueKeyword:
+            case TokenType.FalseKeyword:
+                return new BooleanLiteralNode() { value = Eat().value == "true" };
 
             // Null literal value
             case TokenType.NullKeyword:
@@ -301,23 +326,30 @@ public static class Parser
                 Expect(TokenType.RightParenthesisChar, $"Unexpected token! Expected Closing parenthesis.");
                 return val;
 
-            default: throw new NotImplementedException($"{tkType}");
+            default: currentSrc.ThrowError(new UnexpectedTokenException()); return null!;
         }
     }
     
-    private static MethodCallNode ParseMethodCall()
+    private static MethodCallNode ParseMethodCall(Identifier symbol)
     {
-        var methodName = Eat();
         Expect(TokenType.LeftPerenthesisChar, "Unexpected token! Expected oppening parenthesis!");
+
+        List<ExpressionNode> args = [];
+
+        if (Current().type != TokenType.RightParenthesisChar) do {
+            if (Current().type == TokenType.CommaChar) Eat();
+            args.Add(ParseExpression());
+        } while (Current().type == TokenType.CommaChar);
+
         Expect(TokenType.RightParenthesisChar, "Unexpected token! Expected closing parenthesis!");
 
-        return new MethodCallNode() { target = new Identifier(null!, [methodName.value]) };
+        return new MethodCallNode() { target = symbol, parameters = args };
     }
     #endregion
 
     #region Assembly parsing
 
-    private static StatementNode ParseInlineAsm()
+    private static StatementNode? ParseInlineAsm()
     {
         Eat(); // asm token
         if (Current().type == TokenType.LeftBracketChar)
@@ -337,7 +369,8 @@ public static class Parser
             if (Current().type == TokenType.LineFeed) {Eat(); continue;}
             if (Current().IsEOF()) Expect(TokenType.RighBracketChar, $"Expected '}}' at the end of the scope!");
 
-            scope.body.Add(ParseAsmExpression());
+            var asm = ParseAsmExpression();
+            if (asm != null) scope.body.Add(asm);
         }
 
         Expect(TokenType.RighBracketChar, "Expected '}' at the end of the scope!");
@@ -345,7 +378,7 @@ public static class Parser
         return scope;
     }
 
-    private static AssemblyExpressionNode ParseAsmExpression()
+    private static AssemblyExpressionNode? ParseAsmExpression()
     {
         var esp = new AssemblyExpressionNode();
 
@@ -353,26 +386,30 @@ public static class Parser
 
         esp.instruction = inst.value.ToLower() switch
         {
+            "push" => AssemblyInstruction.Push,
+
             "add" => AssemblyInstruction.Add,
             "div" => AssemblyInstruction.Div,
             "mov" => AssemblyInstruction.Mov,
             "mul" => AssemblyInstruction.Mul,
-            "push" => AssemblyInstruction.Push,
             "sub" => AssemblyInstruction.Sub,
+
+            "call" => AssemblyInstruction.Call,
+
+            "extern" => AssemblyInstruction.Extern,
 
             _ => AssemblyInstruction.Undefined
         };
         
         while (true)
         {
-            esp.arguments.Add(Eat().value);
+            esp.arguments.Add(ParseExpression());
 
             if (Current().type == TokenType.LineFeed) break;
-            else Expect(TokenType.CommaChar, "Expected comma!");
+            else Expect(TokenType.CommaChar, "Expected comma between assembly instruction parameters!");
         }
 
         return esp;
-
     }
 
     #endregion
@@ -383,33 +420,33 @@ public static class Parser
         var token = Expect(TokenType.TypeKeyword, "Type expected!");
 
         #region switch
-        PrimitiveType typeValue = token.value switch
+        PrimitiveTypeList typeValue = token.value switch
         {
-            "void" => PrimitiveType.Void,
+            "void" => PrimitiveTypeList.Void,
             // integers
-            "i8" => PrimitiveType.Integer_8,
-            "i16" => PrimitiveType.Integer_16,
-            "i32" => PrimitiveType.Integer_32,
-            "i64" => PrimitiveType.Integer_64,
-            "i128" => PrimitiveType.Integer_128,
+            "i8" => PrimitiveTypeList.Integer_8,
+            "i16" => PrimitiveTypeList.Integer_16,
+            "i32" => PrimitiveTypeList.Integer_32,
+            "i64" => PrimitiveTypeList.Integer_64,
+            "i128" => PrimitiveTypeList.Integer_128,
 
             // unsigned integers
-            "ui8" or "byte" => PrimitiveType.UnsignedInteger_8,
-            "ui16" => PrimitiveType.UnsignedInteger_16,
-            "ui32" => PrimitiveType.UnsignedInteger_32,
-            "ui64" => PrimitiveType.UnsignedInteger_64,
-            "ui128" => PrimitiveType.UnsignedInteger_128,
+            "u8" or "byte" => PrimitiveTypeList.UnsignedInteger_8,
+            "u16" => PrimitiveTypeList.UnsignedInteger_16,
+            "u32" => PrimitiveTypeList.UnsignedInteger_32,
+            "u64" => PrimitiveTypeList.UnsignedInteger_64,
+            "u128" => PrimitiveTypeList.UnsignedInteger_128,
 
             // floats
-            "f32" or "float" => PrimitiveType.Floating_32,
-            "f64" or "double" => PrimitiveType.Floating_64,
+            "f32" or "float" => PrimitiveTypeList.Floating_32,
+            "f64" or "double" => PrimitiveTypeList.Floating_64,
 
             // boolean
-            "bool" => PrimitiveType.Boolean,
+            "bool" => PrimitiveTypeList.Boolean,
 
             // text
-            "char" => PrimitiveType.Character,
-            "string" => PrimitiveType.String,
+            "char" => PrimitiveTypeList.Character,
+            "string" => PrimitiveTypeList.String,
 
             _ => throw new NotImplementedException(),
         };
@@ -422,6 +459,23 @@ public static class Parser
             value = typeValue,
         };
     }
+    
+    private static Identifier ParseSymbol(TypeItem reffersTo = null!)
+    {
+        var symbol = new Identifier(reffersTo, [Eat().value]);
+
+        while (true)
+        {
+            if (Current().type == TokenType.DotChar)
+            {
+                Eat();
+                symbol.values.Add(Expect(TokenType.Identifier, "Identifier expected!").value);
+            }
+            else break;
+        }
+
+        return symbol;
+    }
     #endregion
 
 }
@@ -429,7 +483,7 @@ public static class Parser
 public static class AstWriter
 {
 
-    public static void WriteAst(ScriptNode program, string oPath)
+    public static void WriteAst(ScriptNode program, string oPath, string sourceName)
     {
         StringBuilder final = new();
 
@@ -440,11 +494,10 @@ public static class AstWriter
             final.AppendLine(ProcessStatement(i));
         }
 
-
-        if (!Directory.Exists(oPath))
-            Directory.CreateDirectory(oPath);
+        if (!Directory.Exists($"{oPath}/AST/"))
+            Directory.CreateDirectory($"{oPath}/AST/");
         
-        File.WriteAllText(oPath + "/parsed-AST.txt", final.ToString().Replace("\r\n", "\n"));
+        File.WriteAllText($"{oPath}/AST/{sourceName}-AST.txt", final.ToString().Replace("\r\n", "\n"));
     }
 
     
@@ -561,6 +614,11 @@ public static class AstWriter
             return ProcessExpression(@exp);
         }
 
+        else if (statement is ReturnStatementNode @ret)
+        {
+            return "return" + (@ret.value != null ? $"{ProcessStatement(@ret.value)}" : "");
+        }
+
         return $"<# undefined statement {statement.GetType().Name} #>";
     }
 
@@ -577,11 +635,17 @@ public static class AstWriter
         else if (expression is UnaryExpressionNode @unaryExp)
             return ProcessUnaryNode(@unaryExp);
         
+        else if (expression is ReferenceModifier @refMod)
+            return @refMod.ToString();
+        
         else if (expression is MethodCallNode @methodCall)
             return @methodCall.ToString();
         
         else if (expression is IdentifierNode @identifier)
             return @identifier.symbol.ToString();
+        
+        else if (expression is BooleanLiteralNode @bool)
+            return @bool.value ? "true" : "false";
 
         else throw new NotImplementedException(expression.GetType().Name);
     }
@@ -610,7 +674,7 @@ public static class AstWriter
     }
     private static string ProcessUnaryNode(UnaryExpressionNode unaryExp)
     {
-        return unaryExp.expOperator switch
+        return unaryExp.expOperator.value switch
         {
             "+" => ProcessExpression(unaryExp.expression),
             "-" => "-" + ProcessExpression(unaryExp.expression),
@@ -618,6 +682,5 @@ public static class AstWriter
             _   => "NaN"
         };
     }
-
 
 }

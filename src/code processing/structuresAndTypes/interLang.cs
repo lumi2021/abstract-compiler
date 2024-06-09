@@ -9,8 +9,9 @@ public static class OpCode
     public static IntermediateInstruction Nop() => new(Instruction.Nop, []);
 
     public static IntermediateInstruction LdConst_int(string type, long value) => new(Instruction.LdConst, [type, value.ToString()]);
-    public static IntermediateInstruction LdConst_string(string type, string value) => new(Instruction.LdConst, [type, value]);
+    public static IntermediateInstruction LdConst_string(string value) => new(Instruction.LdConst, ["str", value]);
     public static IntermediateInstruction LdConst_float(string type, float value) => new(Instruction.LdConst, [type, value.ToString()]);
+    public static IntermediateInstruction LdConst_bool(bool value) => new(Instruction.LdConst, ["bool", value.ToString()]);
 
     public static IntermediateInstruction SetLocal(int id) => new(Instruction.SetLocal, [id.ToString()]);
     public static IntermediateInstruction SetLocal(LocalRef lr) => new(Instruction.SetLocal, [lr.index.ToString()]);
@@ -23,7 +24,7 @@ public static class OpCode
     public static IntermediateInstruction Div() => new(Instruction.Div, []);
     public static IntermediateInstruction Rest() => new(Instruction.Rest, []);
 
-    public static IntermediateInstruction CallStatic(MethodItem method) => new(Instruction.CallStatic, [method.GetGlobalReference().ToString()]);
+    public static IntermediateInstruction CallStatic(MethodItem method) => new(Instruction.CallStatic, [method.GetGlobalReferenceIL()]);
     public static IntermediateInstruction Ret() => new(Instruction.Ret, []);
 }
 
@@ -43,7 +44,7 @@ public readonly struct IntermediateInstruction(Instruction instruction, string[]
             Instruction.GetField        => "getField.{0}",
             Instruction.GetLocal        => "getLocal.{0}",
 
-            Instruction.LdConst         => "ldConst.{0}",
+            Instruction.LdConst         => parameters[0] != "str" ? "ldConst.{0}" : "ldConst.{0} \"{1}\"",
 
             Instruction.Add             => "add",
             Instruction.Sub             => "sub",
@@ -51,9 +52,9 @@ public readonly struct IntermediateInstruction(Instruction instruction, string[]
             Instruction.Div             => "div",
             Instruction.Rest            => "rest",
 
-            Instruction.CallStatic      => "call.Static",
-            Instruction.CallInstance    => "call.Instance",
-            Instruction.CallVirtual     => "call.Virtual",
+            Instruction.CallStatic      => "call.Static {0}",
+            Instruction.CallInstance    => "call.Instance {0}",
+            Instruction.CallVirtual     => "call.Virtual {0}",
             Instruction.Ret             => "ret",
 
             _ => throw new NotSupportedException(instruction.ToString())

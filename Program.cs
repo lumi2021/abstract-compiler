@@ -1,5 +1,4 @@
-﻿using System.Diagnostics;
-using Compiler.CodeProcessing;
+﻿using Compiler.CodeProcessing;
 
 namespace Compiler;
 
@@ -7,11 +6,14 @@ public static class Program
 {
 
     public static bool Debug_PrintAst { get; private set; }
+    public static bool Debug_PrintEval { get; private set; }
 
 
     public static int Main(string[] args)
     {
+#if DEBUG
         Debug();
+#endif
 
         if (args.Length < 1)
         {
@@ -45,6 +47,7 @@ public static class Program
                     switch(args[i+1].ToLower())
                     {
                         case "ast": Debug_PrintAst = true; break;
+                        case "eval": Debug_PrintEval = true; break;
 
                         default: return 1;
                     }
@@ -77,6 +80,7 @@ public static class Program
     private static void Debug()
     {
         Debug_PrintAst = true;
+        Debug_PrintEval = true;
         CodeProcess.Build(["../../../test-code/main.ab"], "../../../test-code/bin", "main.asm");
         Environment.Exit(0);
     }
