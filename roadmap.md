@@ -29,7 +29,14 @@ The steps of the entire proccess to finish the compiler
 ║. . . ╠══ [x] local variable declatation 
 ║. . . ╠══ [ ] global variable declatation
 ║. . . ╠══ [x] inline assembly line
-║. . . ╚══ [x] inline assembly block
+║. . . ╠══ [x] inline assembly block
+║. . . ╠══ [ ] conditional `if`
+║. . . ╠══ [ ] conditional `elif`
+║. . . ╠══ [ ] conditional `else`
+║. . . ╠══ [ ] looping `while`
+║. . . ╠══ [ ] looping `for`
+║. . . ╠══ [ ] looping `do .. while`
+║. . . ╚══ [ ] breaking loop
 ╠══ [ ] Expressions:
 ║. . . ╠══ [x] literal numbers
 ║. . . ╠══ [ ] literal strings
@@ -41,6 +48,10 @@ The steps of the entire proccess to finish the compiler
 ║. . . ╠══ [ ] references and pointers
 ║. . . ╠══ [x] unary operators ( `-`, `+` )
 ║. . . ╠══ [x] binary operators ( `+`, `-`, `*`, `/` , `%`, `^` )
+║. . . ╠══ [ ] binary boolean operators ( `||`, `&&`, `and`, `or` , `xor`, `nor` )
+║. . . ╠══ [ ] unary boolean operators ( `!`, `not` )
+║. . . ╠══ [ ] binary bitwise operators ( `|`, `&`, `bAnd`, `bOr`, `bXor`, `bNor`, `<<`, `>>` )
+║. . . ╠══ [ ] unary bitwise operators ( `bNot` )
 ║. . . ╚══ [ ] type modifiers ( `*`, `&`, `[]` )
 ╠══ [x] single-line comments (# ...)
 ╚══ [x] multi-line comments (### ... ###)
