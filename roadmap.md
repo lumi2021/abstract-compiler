@@ -47,11 +47,13 @@ The steps of the entire proccess to finish the compiler
 ║. . . ╠══ [ ] collections and arrays
 ║. . . ╠══ [ ] references and pointers
 ║. . . ╠══ [x] unary operators ( `-`, `+` )
-║. . . ╠══ [x] binary operators ( `+`, `-`, `*`, `/` , `%`, `^` )
+║. . . ╠══ [x] binary operators ( `+`, `-`, `*`, `/` , `%`, `**` )
 ║. . . ╠══ [ ] binary boolean operators ( `||`, `&&`, `and`, `or` , `xor`, `nor` )
+║. . . ╠══ [ ] boolean comparation operators ( `>=`, `<=`, `==`, `!=`, `<`, `>` )
 ║. . . ╠══ [ ] unary boolean operators ( `!`, `not` )
-║. . . ╠══ [ ] binary bitwise operators ( `|`, `&`, `bAnd`, `bOr`, `bXor`, `bNor`, `<<`, `>>` )
+║. . . ╠══ [ ] binary bitwise operators ( `|`, `&`, `^`, `band`, `bor`, `bxor`, `bnor`, `<<`, `>>` )
 ║. . . ╠══ [ ] unary bitwise operators ( `bNot` )
+║. . . ╠══ [ ] assiginment binary operators ( `+=`, `-=`, `*=`, `/=`, `%=`, `**=` )
 ║. . . ╚══ [ ] type modifiers ( `*`, `&`, `[]` )
 ╠══ [x] single-line comments (# ...)
 ╚══ [x] multi-line comments (### ... ###)
