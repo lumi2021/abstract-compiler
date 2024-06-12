@@ -25,7 +25,20 @@ public static class OpCode
     public static IntermediateInstruction Rest() => new(Instruction.Rest, []);
 
     public static IntermediateInstruction CallStatic(MethodItem method) => new(Instruction.CallStatic, [method.GetGlobalReferenceIL()]);
+
+
     public static IntermediateInstruction Ret() => new(Instruction.Ret, []);
+
+    public static IntermediateInstruction Jump(int offset) => new(Instruction.Jump, [offset.ToString()]);
+    
+    public static IntermediateInstruction If(ConditionMethod condition)
+        => new(Instruction.If, [condition.ToString()]);
+
+    public static IntermediateInstruction If(ConditionMethod condition, string value)
+        => new(Instruction.If, [condition.ToString(), value]);
+
+    public static IntermediateInstruction EndIf()
+        => new(Instruction.EndIf, []);
 }
 
 public readonly struct IntermediateInstruction(Instruction instruction, string[] parameters)
@@ -55,6 +68,11 @@ public readonly struct IntermediateInstruction(Instruction instruction, string[]
             Instruction.CallStatic      => "call.Static {0}",
             Instruction.CallInstance    => "call.Instance {0}",
             Instruction.CallVirtual     => "call.Virtual {0}",
+
+            Instruction.Jump             => "jump",
+            Instruction.If               => "if.{0}",
+            Instruction.EndIf            => "endif",
+
             Instruction.Ret             => "ret",
 
             _ => throw new NotSupportedException(instruction.ToString())
@@ -97,5 +115,27 @@ public enum Instruction : byte
     CallStatic,
     CallInstance,
     CallVirtual,
+
+    Jump,
+    If,
+    EndIf,
     Ret
+}
+
+public enum ConditionMethod : byte
+{
+    Forced,
+
+    Greater,
+    Lesser,
+    GreaterEqual,
+    LesserEqual,
+
+    Equal,
+
+    True,
+    False,
+
+    Zero,
+
 }

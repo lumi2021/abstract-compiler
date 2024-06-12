@@ -4,3 +4,10 @@ namespace Std.Console
     func void Log(i32 value)
     
 }
+
+namespace Std.Memory
+{
+
+    func i64 GenArray(i64 ptr, i32 len)
+    
+}

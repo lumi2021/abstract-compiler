@@ -1,9 +1,7 @@
-using System.Security.Cryptography;
 using Compiler.CodeProcessing.AbstractSyntaxTree.Nodes;
 using Compiler.CodeProcessing.CompilationStructuring;
 using Compiler.CodeProcessing.Exeptions;
 using Compiler.CodeProcessing.IntermediateAssembyLanguage;
-using Compiler.CodeProcessing.Scripts;
 using Compiler.Util.Compilation;
 
 namespace Compiler.CodeProcessing.Evaluating;
@@ -71,11 +69,7 @@ public static class Evaluation
 
                     foreach (var stat in @method.methodScope)
                     {
-                        if (stat is AssiginmentExpressionNode @assigin)
-                            @assigin.value = ReduceExpression(@assigin.value);
-
-                        methodItem.AppendRaw(stat);
-
+                        methodItem.AppendRaw(TryReduceStatement(stat));
                     }
 
                     ns.methods.Add(methodItem);
@@ -102,49 +96,7 @@ public static class Evaluation
 
             foreach (var l in mt.codeStatements.ToArray())
             {
-
-                if (l is ExpressionNode @exp)
-                    EvaluateExpressionIdentifiers(@exp, mt.Parent, localVariables);
-
-                else if (l is VariableDeclarationNode @varDec)
-                {
-                    var type = new TypeItem(@varDec.type);
-                    localVariables.Add(new(@varDec.identifier, localIndex++, type));
-                    mt.Alloc(type);
-                    var idx = mt.Del(l);
-
-                    if (@varDec.value != null)
-                    {
-
-                        var nAssigin = new AssiginmentExpressionNode()
-                        {
-                            assigne = new IdentifierNode(type, localVariables.Count - 1),
-                            value = @varDec.value
-                        };
-                        mt.InsertRaw(idx, nAssigin);
-
-                    }
-                    else
-                    {
-                        var nAssigin = new AssiginmentExpressionNode()
-                        {
-                            assigne = new IdentifierNode(type, localVariables.Count - 1),
-                            value = Typing.DefaultValueOf(((PrimitiveType)type.Value).Value)
-                        };
-                        mt.InsertRaw(idx, nAssigin);
-                    }
-                }
-
-                else if (l is ReturnStatementNode @return)
-                {
-                    if (@return.value != null)
-                        EvaluateExpressionIdentifiers(@return.value, mt.Parent, localVariables);
-                }
-
-                else mt.ScriptRef.ThrowError(
-                    new InstructionProcessingNotImplementedException()
-                );
-
+                EvaluateStatementIdentifiers(l, mt, localVariables, ref localIndex);                
             }
 
         }
@@ -222,6 +174,41 @@ public static class Evaluation
 
     #region helper methods
 
+    private static StatementNode TryReduceStatement(StatementNode stat)
+    {
+
+        if (stat is ExpressionNode @exp)
+        {
+            return ReduceExpression(@exp);
+        }
+
+        else if (stat is ReturnStatementNode @ret)
+        {
+            if (@ret.value != null)
+                @ret.value = ReduceExpression(@ret.value);
+            return @ret;
+        }
+
+        else if (stat is VariableDeclarationNode @varDec)
+        {
+            if (@varDec.value != null)
+                @varDec.value = ReduceExpression(@varDec.value);
+            return @varDec;
+        }
+
+        else if (stat is IfStatementNode @ifstat)
+        {
+            @ifstat.condition = ReduceExpression(@ifstat.condition);
+            if (@ifstat.result != null) @ifstat.result = TryReduceStatement(@ifstat.result);
+
+            return @ifstat;
+        }
+
+        else Console.WriteLine($"unimplemented \"{stat}\";");
+
+        return stat;
+    }
+
     private static ExpressionNode ReduceExpression(ExpressionNode exp)
     {
         if (exp is BinaryExpressionNode @bin)
@@ -229,6 +216,13 @@ public static class Evaluation
 
         else if (exp is MethodCallNode @call)
             return ReduceMethodCall(@call);
+        
+        else if (exp is AssiginmentExpressionNode @ass)
+        {
+            @ass.assigne = ReduceExpression(@ass.assigne);
+            @ass.value = ReduceExpression(@ass.value);
+            return @ass;
+        }
         
         else return exp;
     }
@@ -275,6 +269,60 @@ public static class Evaluation
         return call;
     }
 
+    private static void EvaluateStatementIdentifiers(StatementNode stat, MethodItem mt, List<LocalVar> localVariables, ref int localIndex)
+    {
+        if (stat is ExpressionNode @exp)
+            EvaluateExpressionIdentifiers(@exp, mt.Parent, localVariables);
+
+        else if (stat is VariableDeclarationNode @varDec)
+        {
+            if (@varDec.value != null) EvaluateExpressionIdentifiers(@varDec.value, mt.Parent, localVariables);
+            
+            var type = new TypeItem(@varDec.type);
+            localVariables.Add(new(@varDec.identifier, localIndex++, type));
+            mt.Alloc(type);
+            var idx = mt.Del(stat);
+
+            if (@varDec.value != null)
+            {
+                var nAssigin = new AssiginmentExpressionNode()
+                {
+                    assigne = new IdentifierNode(type, localVariables.Count - 1),
+                    value = @varDec.value
+                };
+                mt.InsertRaw(idx, nAssigin);
+
+            }
+            else
+            {
+                var nAssigin = new AssiginmentExpressionNode()
+                {
+                    assigne = new IdentifierNode(type, localVariables.Count - 1),
+                    value = Typing.DefaultValueOf(((PrimitiveType)type.Value).Value)
+                };
+                mt.InsertRaw(idx, nAssigin);
+            }
+        }
+
+        else if (stat is ReturnStatementNode @return)
+        {
+            if (@return.value != null)
+                EvaluateExpressionIdentifiers(@return.value, mt.Parent, localVariables);
+        }
+
+        else if (stat is IfStatementNode @ifstat)
+        {
+            EvaluateExpressionIdentifiers(@ifstat.condition, mt.Parent, localVariables);
+            if (@ifstat.result != null)
+                EvaluateStatementIdentifiers(@ifstat.result, mt, localVariables, ref localIndex);
+        }
+
+        else mt.ScriptRef.ThrowError(
+            new InstructionProcessingNotImplementedException(stat.GetType().Name)
+        );
+
+    }
+
     private static void EvaluateExpressionIdentifiers(ExpressionNode exp, NamespaceItem? ns,  List<LocalVar> decVars)
     {
 
@@ -316,6 +364,7 @@ public static class Evaluation
 
         else if (exp is MethodCallNode @methodCall)
         {
+
             if (!@methodCall.processed)
             {
 
@@ -352,7 +401,7 @@ public static class Evaluation
 
     private static TypeItem EvaluateExpressionType(ExpressionNode exp)
     {
-        Console.WriteLine(exp.GetType().Name);
+        Console.WriteLine($"l. 385: {exp}");
         return null!;
     }
 
@@ -418,6 +467,7 @@ public static class Evaluation
 
         }
 
+        Console.WriteLine($"\"{methodReference}\" not found!");
 
         return [];
     }
@@ -449,7 +499,12 @@ public static class Evaluation
             return [];
         }
 
-        else throw new InstructionProcessingNotImplementedException();
+        else if (stat is IfStatementNode @ifstat)
+        {
+            return IfToAsm(@ifstat);
+        }
+
+        else throw new InstructionProcessingNotImplementedException(stat.GetType().Name);
 
     }
 
@@ -536,6 +591,24 @@ public static class Evaluation
         else throw new NotImplementedException(exp.GetType().Name);
 
         return [.. rist];
+    }
+
+    private static IntermediateInstruction[] IfToAsm(IfStatementNode ifstat)
+    {
+        List<IntermediateInstruction> instructions = [];
+
+        // Get the condition
+        instructions.AddRange(ExpressionToAsm(ifstat.condition));
+
+        // Calculate the conditional
+        instructions.Add(OpCode.If(ConditionMethod.True));
+
+        // Append scope content
+        instructions.AddRange(StatementToAsm(ifstat.result!));
+
+        instructions.Add(OpCode.EndIf());
+
+        return [.. instructions];
     }
 
     #endregion

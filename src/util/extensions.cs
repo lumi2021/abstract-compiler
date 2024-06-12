@@ -27,4 +27,11 @@ public static class Extensions
         return char.IsLetter(c) || c == '_';
     }
 
+    private static readonly char[] _languageSymbols = [
+        '=', '+', '-', '*', '/', '!', '@', '$', '%', '&', '|', ':', ';', '.', '?', '<', '>'
+    ];
+
+    public static bool IsLanguageSymbol(this char c)
+        => _languageSymbols.Contains(c);
+
 }

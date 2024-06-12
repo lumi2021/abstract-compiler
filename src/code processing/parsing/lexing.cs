@@ -33,6 +33,14 @@ public static class Lexer
         { "const", TokenType.ConstKeyword },
         { "func", TokenType.FuncKeyword },
 
+        { "if", TokenType.IfKeyword },
+        { "elif", TokenType.ElifKeyword },
+        { "else", TokenType.ElseKeyword },
+
+        { "while", TokenType.WhileKeyword },
+        { "for", TokenType.ForKeyword },
+        { "do", TokenType.DoKeyword },
+
         { "return", TokenType.ReturnKeyword },
         { "asm", TokenType.AsmKeyword },
 
@@ -76,12 +84,47 @@ public static class Lexer
         for (var i = 0; i < sourceCode.Length; i++)
         {
             char c = sourceCode[i];
+            char c2 = sourceCode.Length > i + 1 ? sourceCode[i+1] : '\0';
 
             // Check if it's skipable
             if (c == ' ' | c == '\r' | c == '\t') { continue; }
 
+            // Check if it's a multiline character
+            if (c.IsLanguageSymbol() && c2.IsLanguageSymbol())
+            {
+                string cc = $"{c}{c2}";
+
+                TokenType type = cc switch {
+
+                    "=>" => TokenType.RightArrowOperator,
+                    "==" => TokenType.EqualOperator,
+                    "!=" => TokenType.UnEqualOperator,
+
+                    "<=" => TokenType.LessEqualsOperator,
+                    ">=" => TokenType.GreatEqualsOperator,
+
+                    "**" => TokenType.PowerOperator,
+
+                    "+=" => TokenType.AddAssigin,
+                    "-=" => TokenType.SubAssigin,
+                    "*=" => TokenType.MulAssigin,
+                    "/=" => TokenType.DivAssigin,
+                    "%=" => TokenType.RestAssigin,
+
+                    _ => TokenType.Undefined
+                };
+
+                if (type != TokenType.Undefined)
+                {
+                    tokens.Add(Tokenize(cc, type, i, i+1));
+
+                    i++;
+                    continue;
+                }
+            }
+
             // Check single characters
-            else if (c == '\n')
+            if (c == '\n')
                 tokens.Add(Tokenize("\\n", TokenType.LineFeed, i, -1));
             else if (c == '(')
                 tokens.Add(Tokenize(c, TokenType.LeftPerenthesisChar, i));
@@ -90,7 +133,7 @@ public static class Lexer
             else if (c == '{')
                 tokens.Add(Tokenize(c, TokenType.LeftBracketChar, i));
             else if (c == '}')
-                tokens.Add(Tokenize(c, TokenType.RighBracketChar, i));
+                tokens.Add(Tokenize(c, TokenType.RightBracketChar, i));
 
             else if (c == '+')
                 tokens.Add(Tokenize(c, TokenType.CrossChar, i));
@@ -300,6 +343,8 @@ public struct Token {
 }
 
 public enum TokenType {
+    Undefined,
+
     NumberValue,
     StringLiteralValue,
     Identifier,
@@ -310,6 +355,14 @@ public enum TokenType {
     LetKeyword,             // let
     ConstKeyword,           // const
     FuncKeyword,            // func
+
+    IfKeyword,              // if
+    ElifKeyword,            // elif
+    ElseKeyword,            // else
+    WhileKeyword,           // while
+    ForKeyword,             // for
+    DoKeyword,              // do
+    BreakKeyword,           // break
 
     ReturnKeyword,          // return
     AsmKeyword,             // asm
@@ -322,7 +375,10 @@ public enum TokenType {
     RightParenthesisChar,   // )
 
     LeftBracketChar,        // {
-    RighBracketChar,        // }
+    RightBracketChar,       // }
+
+    LeftAngleChar,          // <
+    RightAngleChar,         // >
 
     CrossChar,              // +
     MinusChar,              // -
@@ -332,9 +388,25 @@ public enum TokenType {
     EqualsChar,             // =
     ComercialEChar,         // &
 
+    RightArrowOperator,     // =>
+
+    EqualOperator,          // ==
+    UnEqualOperator,        // !=
+    LessEqualsOperator,     // <=
+    GreatEqualsOperator,    // >=
+
+    PowerOperator,          // **
+
+    AddAssigin,             // +=
+    SubAssigin,             // -=
+    MulAssigin,             // *=
+    DivAssigin,             // /=
+    RestAssigin,            // %=
+
     CommaChar,              // ,
     DotChar,                // .
     EOFChar,                // \EOF
 
     LineFeed,               // \n
 }
+

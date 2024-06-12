@@ -66,7 +66,10 @@ public static class CodeProcess
         var evaluated = Evaluation.EvalSource([.. scriptTrees]);
 
         if (!ErrorHandler.CompilationFailed)
-            Compilator.Compile(evaluated, outputDir, outputFile);
+        {
+            BaseCompiler compiler = new WasmCompiler(); // compiling to Wasm
+            compiler.Compile(evaluated, outputDir, outputFile);
+        }
 
         ErrorHandler.LogErrors();
 

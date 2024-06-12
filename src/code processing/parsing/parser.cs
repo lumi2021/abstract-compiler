@@ -61,6 +61,7 @@ public static class Parser
 
             TokenType.ReturnKeyword => ParseReturnStatement(),
             TokenType.AsmKeyword => ParseInlineAsm(),
+            TokenType.IfKeyword => ParseIfStatement(),
 
             _ => ParseExpression(),
         };
@@ -168,16 +169,16 @@ public static class Parser
 
         Expect(TokenType.LeftBracketChar, "Left bracket expected to open the scope!");
     
-        while(Current().type != TokenType.RighBracketChar)
+        while(Current().type != TokenType.RightBracketChar)
         {
             if (Current().type == TokenType.LineFeed) {Eat(); continue;}
-            if (Current().IsEOF()) Expect(TokenType.RighBracketChar, $"Expected '}}' at the end of the scope!");
+            if (Current().IsEOF()) Expect(TokenType.RightBracketChar, $"Expected '}}' at the end of the scope!");
 
             var stat = ParseStatement();
             if (stat != null) scope.body.Add(stat);
         }
 
-        Expect(TokenType.RighBracketChar, "Expected '}' at the end of the scope!");
+        Expect(TokenType.RightBracketChar, "Expected '}' at the end of the scope!");
 
         return scope;
     }
@@ -192,6 +193,19 @@ public static class Parser
         return new() {
             value = value
         };
+    }
+    
+    private static IfStatementNode ParseIfStatement()
+    {
+        var ifStat = new IfStatementNode();
+
+        Eat();
+
+        ifStat.condition = ParseExpression();
+        Expect(TokenType.RightArrowOperator, "Expected right arow after conditional expression and before the conditioned statement!");
+        ifStat.result = ParseStatement();
+
+        return ifStat;
     }
     #endregion
 
@@ -326,7 +340,10 @@ public static class Parser
                 Expect(TokenType.RightParenthesisChar, $"Unexpected token! Expected Closing parenthesis.");
                 return val;
 
-            default: currentSrc.ThrowError(new UnexpectedTokenException()); return null!;
+            default: // unespected expression
+                currentSrc.ThrowError(new UnexpectedTokenException(tk));
+                Eat();
+                return null!;
         }
     }
     
@@ -364,16 +381,16 @@ public static class Parser
 
         Expect(TokenType.LeftBracketChar, "Left bracket expected to open the scope!");
 
-        while (Current().type != TokenType.RighBracketChar)
+        while (Current().type != TokenType.RightBracketChar)
         {
             if (Current().type == TokenType.LineFeed) {Eat(); continue;}
-            if (Current().IsEOF()) Expect(TokenType.RighBracketChar, $"Expected '}}' at the end of the scope!");
+            if (Current().IsEOF()) Expect(TokenType.RightBracketChar, $"Expected '}}' at the end of the scope!");
 
             var asm = ParseAsmExpression();
             if (asm != null) scope.body.Add(asm);
         }
 
-        Expect(TokenType.RighBracketChar, "Expected '}' at the end of the scope!");
+        Expect(TokenType.RightBracketChar, "Expected '}' at the end of the scope!");
 
         return scope;
     }
@@ -616,7 +633,12 @@ public static class AstWriter
 
         else if (statement is ReturnStatementNode @ret)
         {
-            return "return" + (@ret.value != null ? $"{ProcessStatement(@ret.value)}" : "");
+            return "return " + (@ret.value != null ? $"{ProcessStatement(@ret.value)}" : "");
+        }
+
+        else if (statement is IfStatementNode @ifstat)
+        {
+            return $"if {@ifstat.condition} => {@ifstat.result}";
         }
 
         return $"<# undefined statement {statement.GetType().Name} #>";

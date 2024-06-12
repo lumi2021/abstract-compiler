@@ -3,6 +3,9 @@ using Compiler.CodeProcessing.CompilationStructuring;
 
 namespace Compiler.Util.Compilation;
 
+// TODO rewrite this
+
+[Obsolete]
 public class NASMBuilder
 {
 
@@ -86,6 +89,66 @@ public class NASMBuilder
         return new(this);
     }
 
+    public EIResult Mul(Register left, long right)
+    {
+        instructions.Add(new("", "MUL", [left.ToString(), right > 0 ? $"0x{right:X}" : $"{right}"]));
+        return new(this);
+    }
+    public EIResult Mul(Register left, string right)
+    {
+        instructions.Add(new("", "MUL", [left.ToString(), right]));
+        return new(this);
+    }
+    public EIResult IMul(Register left, long right)
+    {
+        instructions.Add(new("", "IMUL", [left.ToString(), right > 0 ? $"0x{right:X}" : $"{right}"]));
+        return new(this);
+    }
+    public EIResult IMul(Register left, string right)
+    {
+        instructions.Add(new("", "IMUL", [left.ToString(), right]));
+        return new(this);
+    }
+
+    public EIResult Div(long right)
+    {
+        instructions.Add(new("", "DIV", [right > 0 ? $"0x{right:X}" : $"{right}"]));
+        return new(this);
+    }
+    public EIResult Div(string right)
+    {
+        instructions.Add(new("", "DIV", [right]));
+        return new(this);
+    }
+    public EIResult IDiv(long right)
+    {
+        instructions.Add(new("", "IDIV", [right > 0 ? $"0x{right:X}" : $"{right}"]));
+        return new(this);
+    }
+    public EIResult IDiv(string right)
+    {
+        instructions.Add(new("", "IDIV", [right]));
+        return new(this);
+    }
+
+    public EIResult Xor(Register left, Register right)
+    {
+        instructions.Add(new("", "XOR", [left.ToString(), right.ToString()]));
+        return new(this);
+    }
+    public EIResult Xor(Register left, string right)
+    {
+        instructions.Add(new("", "XOR", [left.ToString(), right]));
+        return new(this);
+    }
+
+    public EIResult ClearRegister(Register target)
+    {
+        instructions.Add(new("", "XOR", [target.ToString(), target.ToString()]));
+        return new(this);
+    }
+
+
     public EIResult Pop(Register to)
     {
         instructions.Add(new("", "POP", [to.ToString()]));
@@ -110,6 +173,63 @@ public class NASMBuilder
     public EIResult Call(MethodItem method)
     {
         instructions.Add(new("", "CALL", [method.GetGlobalReferenceAsm()]));
+        return new(this);
+    }
+
+    public EIResult Cmp(Register val1, Register val2)
+    {
+        instructions.Add(new("", "CMP", [val1.ToString(), val2.ToString()]));
+        return new(this);
+    }
+    public EIResult Cmp(Register val1, string val2)
+    {
+        instructions.Add(new("", "CMP", [val1.ToString(), val2]));
+        return new(this);
+    }
+
+    public EIResult Jmp(string to)
+    {
+        instructions.Add(new("", "JMP", [to]));
+        return new(this);
+    }
+    public EIResult Jz(string to)
+    {
+        instructions.Add(new("", "JZ", [to]));
+        return new(this);
+    }
+    public EIResult Je(string to)
+    {
+        instructions.Add(new("", "JE", [to]));
+        return new(this);
+    }
+    public EIResult Jnz(string to)
+    {
+        instructions.Add(new("", "JNZ", [to]));
+        return new(this);
+    }
+    public EIResult Jne(string to)
+    {
+        instructions.Add(new("", "JNE", [to]));
+        return new(this);
+    }
+    public EIResult Jg(string to)
+    {
+        instructions.Add(new("", "JG", [to]));
+        return new(this);
+    }
+    public EIResult Jge(string to)
+    {
+        instructions.Add(new("", "JGE", [to]));
+        return new(this);
+    }
+    public EIResult Jl(string to)
+    {
+        instructions.Add(new("", "JL", [to]));
+        return new(this);
+    }
+    public EIResult Jle(string to)
+    {
+        instructions.Add(new("", "JLE", [to]));
         return new(this);
     }
 
@@ -303,8 +423,9 @@ public class NASMBuilder
 
 }
 
-public readonly struct Register(string value)
+public readonly struct Register(string value, NASMDataSize size)
 {
+    public readonly NASMDataSize size = size;
     private readonly string value = value;
     public override string ToString() => value;
 }

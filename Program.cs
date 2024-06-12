@@ -81,7 +81,7 @@ public static class Program
     {
         Debug_PrintAst = true;
         Debug_PrintEval = true;
-        CodeProcess.Build(["../../../test-code/main.ab"], "../../../test-code/bin", "main.asm");
+        CodeProcess.Build(["../../../test-code/main.ab"], "../../../test-code/bin", "main.wat");
         Environment.Exit(0);
     }
 

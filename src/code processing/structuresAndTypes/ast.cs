@@ -82,6 +82,14 @@ public class LocalDeclarationNode : StatementNode
     public override string ToString() => isConstant? "const" : "let" + $"{type} {reference}";
 }
 
+public class IfStatementNode : StatementNode
+{
+    public ExpressionNode condition = null!;
+    public StatementNode? result = null;
+
+    public override string ToString() => $"if {condition} => {result}";
+}
+
 public class ReturnStatementNode : StatementNode
 {
     public ExpressionNode? value = null;
