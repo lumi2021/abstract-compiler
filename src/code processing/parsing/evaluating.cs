@@ -72,6 +72,8 @@ public static class Evaluation
                         methodItem.AppendRaw(TryReduceStatement(stat));
                     }
 
+                    VerifyMethod(methodItem);
+
                     ns.methods.Add(methodItem);
                     allMethods.Add(methodItem);
                 }
@@ -174,6 +176,45 @@ public static class Evaluation
 
     #region helper methods
 
+    private static void VerifyMethod(MethodItem method)
+    {
+        var nameSpace = method.Parent;
+
+        var overloads = nameSpace.methods.Where(m => m.name == method.name).ToArray();
+        if (overloads.Length > 0)
+        {
+
+            foreach (var i in overloads)
+            {
+                bool allSame = true;
+                if (i.parameters.Count == method.parameters.Count)
+                {
+
+                    for (var j = 0; j < i.parameters.Count; j++)
+                    {
+
+                        var p1 = i.parameters[j]; 
+                        var p2 = method.parameters[j]; 
+
+                        if (p1.type != p2.type)
+                        {
+                            allSame = false;
+                            break;
+                        }
+                    }
+                }
+                if (allSame)
+                {
+                    nameSpace.ScriptSourceReference.ThrowError(new InvalidMethodOverloadingException());
+                    break;
+                }
+            }
+
+        }
+
+        return;
+    }
+
     private static StatementNode TryReduceStatement(StatementNode stat)
     {
 
@@ -272,11 +313,11 @@ public static class Evaluation
     private static void EvaluateStatementIdentifiers(StatementNode stat, MethodItem mt, List<LocalVar> localVariables, ref int localIndex)
     {
         if (stat is ExpressionNode @exp)
-            EvaluateExpressionIdentifiers(@exp, mt.Parent, localVariables);
+            EvaluateExpressionIdentifiers(@exp, mt, mt.Parent, localVariables);
 
         else if (stat is VariableDeclarationNode @varDec)
         {
-            if (@varDec.value != null) EvaluateExpressionIdentifiers(@varDec.value, mt.Parent, localVariables);
+            if (@varDec.value != null) EvaluateExpressionIdentifiers(@varDec.value, mt, mt.Parent, localVariables);
             
             var type = new TypeItem(@varDec.type);
             localVariables.Add(new(@varDec.identifier, localIndex++, type));
@@ -307,12 +348,12 @@ public static class Evaluation
         else if (stat is ReturnStatementNode @return)
         {
             if (@return.value != null)
-                EvaluateExpressionIdentifiers(@return.value, mt.Parent, localVariables);
+                EvaluateExpressionIdentifiers(@return.value, mt, mt.Parent, localVariables);
         }
 
         else if (stat is IfStatementNode @ifstat)
         {
-            EvaluateExpressionIdentifiers(@ifstat.condition, mt.Parent, localVariables);
+            EvaluateExpressionIdentifiers(@ifstat.condition, mt, mt.Parent, localVariables);
             if (@ifstat.result != null)
                 EvaluateStatementIdentifiers(@ifstat.result, mt, localVariables, ref localIndex);
         }
@@ -323,43 +364,47 @@ public static class Evaluation
 
     }
 
-    private static void EvaluateExpressionIdentifiers(ExpressionNode exp, NamespaceItem? ns,  List<LocalVar> decVars)
+    private static void EvaluateExpressionIdentifiers(ExpressionNode exp, MethodItem? mt, NamespaceItem? ns,  List<LocalVar> decVars)
     {
 
         if (exp is BinaryExpressionNode @binExp)
         {
-            EvaluateExpressionIdentifiers(@binExp.leftStatement, ns, decVars);
-            EvaluateExpressionIdentifiers(@binExp.rightStatement, ns, decVars);
+            EvaluateExpressionIdentifiers(@binExp.leftStatement, mt, ns, decVars);
+            EvaluateExpressionIdentifiers(@binExp.rightStatement, mt, ns, decVars);
         }
         else if (exp is UnaryExpressionNode @unExp)
         {
-            EvaluateExpressionIdentifiers(@unExp.expression, ns, decVars);
+            EvaluateExpressionIdentifiers(@unExp.expression, mt, ns, decVars);
         }
         
         else if (exp is AssiginmentExpressionNode @ass)
         {
-            EvaluateExpressionIdentifiers(@ass.assigne, ns, decVars);
-            EvaluateExpressionIdentifiers(@ass.value, ns, decVars);
+            EvaluateExpressionIdentifiers(@ass.assigne, mt, ns, decVars);
+            EvaluateExpressionIdentifiers(@ass.value, mt, ns, decVars);
         }
 
         else if (exp is IdentifierNode @ident)
         {
-            if (!@ident.processed)
+
+            var idx = decVars.FindIndex(e => e.identifier == @ident.symbol);
+
+            @ident.processed = true;
+
+            if (idx >= 0)
             {
-
-                var idx = decVars.FindIndex(e => e.identifier == @ident.symbol);
-                if (idx != -1)
-                {
-
-                    @ident.processed = true;
-                    @ident.isLocal = true;
-                    @ident.localRef = new(decVars[idx].type, decVars[idx].index);
-                    @ident.symbol.refersToType = decVars[idx].type;
-
-                }
-                else Console.WriteLine("a: " + @ident.symbol);
+                @ident.isLocal = true;
+                @ident.localRef = new(decVars[idx].type, decVars[idx].index);
+                @ident.symbol.refersToType = decVars[idx].type;
 
             }
+            else 
+            {
+                var ridx = Math.Abs(idx) - 1;
+                @ident.isLocal = true;
+                @ident.localRef = new(mt!.parameters[ridx].type, idx);
+                @ident.symbol.refersToType = mt!.parameters[ridx].type;
+            }
+
         }
 
         else if (exp is MethodCallNode @methodCall)
@@ -368,8 +413,46 @@ public static class Evaluation
             if (!@methodCall.processed)
             {
 
+                // process arguments
+                for (var i = 0; i < @methodCall.parameters.Count; i++)
+                {
+                    EvaluateExpressionIdentifiers(@methodCall.parameters[i], mt, ns, decVars);
+                }
+                
+                // evaluate arguments types
                 Identifier methodName = @methodCall.target;
-                var method = FindReferencedMethodAndOverloads(methodName, ns)[0];
+                var overloads = FindReferencedMethodAndOverloads(methodName, ns);
+
+                if (overloads.Length == 0) throw new MethodNotFoundException();
+
+                MethodItem method = null!;
+                foreach (var mtd in overloads)
+                {
+                    if (@methodCall.parameters.Count != mtd.parameters.Count) continue;
+
+                    // just to make sure hehe
+                    if (@methodCall.parameters.Count == 0 && mtd.parameters.Count == 0)
+                    {
+                        method = mtd;
+                        break;
+                    }
+
+                    for (var i = 0; i < mtd.parameters.Count; i++)
+                    {
+
+                        var pType = mtd.parameters[i].type;
+                        var aType = EvaluateExpressionType(@methodCall.parameters[i]);
+
+                        if (pType == aType ||
+                        (IsNumericType(pType.Value) && IsNumericType(aType.Value)))
+                        {
+                            method = mtd;
+                            break;
+                        }
+                    }
+                }
+
+                if (method == null) throw new MethodOverloadNotFoundException();
 
                 if (method != null)
                 {
@@ -378,12 +461,12 @@ public static class Evaluation
 
                     foreach (var arg in @methodCall.parameters)
                     {
-                        EvaluateExpressionIdentifiers(arg, ns, decVars);
+                        EvaluateExpressionIdentifiers(arg, mt, ns, decVars);
                     }
 
                     @methodCall.processed = true;
                 }
-                else Console.WriteLine($"Undefined Method \"{methodName}\"");
+                else Console.WriteLine($"l. 442: Undefined Method \"{methodName}\"");
 
             }
         }
@@ -401,8 +484,17 @@ public static class Evaluation
 
     private static TypeItem EvaluateExpressionType(ExpressionNode exp)
     {
-        Console.WriteLine($"l. 385: {exp}");
-        return null!;
+        Console.WriteLine($"{exp} ({exp.GetType().Name})");
+
+        if (exp is MethodCallNode @call)
+            return @call.target.refersToType;
+        
+        else if (exp is StringLiteralNode) return new TypeItem(PrimitiveTypeList.String);
+        else if (exp is NumericLiteralNode) return new TypeItem(PrimitiveTypeList.__Generic__Number);
+
+        else if (exp is IdentifierNode @ident) return @ident.refersToType;
+
+        throw new NotImplementedException($"{exp.GetType().Name} is not supported.");
     }
 
     private static bool IsNumericType(ILangType t)
@@ -541,7 +633,7 @@ public static class Evaluation
         {
             string IlTypeString = "i64";
 
-            if (expectedType != null && expectedType is TypeItem @pt)
+            if (expectedType is not null and TypeItem @pt)
                 IlTypeString = @pt.Value.ToIlString();
             
             rist.Add(OpCode.LdConst_int(IlTypeString, (long)@numericLit.value));

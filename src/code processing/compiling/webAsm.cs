@@ -1,3 +1,4 @@
+using System.Text;
 using Compiler.CodeProcessing.CompilationStructuring;
 using Compiler.CodeProcessing.IntermediateAssembyLanguage;
 using Compiler.CodeProcessing.Scripts;
@@ -84,12 +85,23 @@ public class WasmCompiler : BaseCompiler
                 break;
             
             case Instruction.LdConst:
-                string value = i.parameters[1];
-                
-                if (i.parameters[0] == "bool")
-                    value = value == "True" ? "1 ;; true" : "0 ;; false" ;
 
-                method.Emit(new OpCode.Const(String2WasmType(i.parameters[0]), value));
+                if (i.parameters[0] == "str")
+                {
+                    ulong ptr = method.Module.AppendReadOnlyData("string", i.parameters[1]);
+                    method.Emit(new OpCode.Const(WASMBuilder.WasmType.i64, $"{ptr}"));
+                    method.Emit(new OpCode.Call("Std.Memory.LoadString?str"));
+                }
+                else
+                {
+                    string value = i.parameters[1];
+                    
+                    if (i.parameters[0] == "bool")
+                        value = value == "True" ? "1 ;; true" : "0 ;; false" ;
+
+                    method.Emit(new OpCode.Const(String2WasmType(i.parameters[0]), value));
+                }
+                
                 break;
 
             case Instruction.CallStatic:
@@ -131,6 +143,8 @@ public class WasmCompiler : BaseCompiler
             "f64" => WASMBuilder.WasmType.f64,
 
             "bool" or "char" => WASMBuilder.WasmType.i32,
+
+            "str" => WASMBuilder.WasmType._string,
 
             _ => throw new NotImplementedException(str)
         };

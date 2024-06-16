@@ -17,9 +17,16 @@ public static class Lexer
             TokenType.LeftPerenthesisChar
         ] },
         { "bothSides", [
-            TokenType.CrossChar, TokenType.MinusChar,
+            TokenType.CrossChar, TokenType.MinusChar, TokenType.PowerOperator,
             TokenType.StarChar, TokenType.StarChar, TokenType.PercentChar,
-            TokenType.EqualsChar
+            TokenType.EqualsChar,
+
+            TokenType.RightArrowOperator, TokenType.LessEqualsOperator,
+            TokenType.EqualOperator, TokenType.GreatEqualsOperator,
+            TokenType.UnEqualOperator,
+
+            TokenType.AddAssigin, TokenType.MulAssigin,
+            TokenType.SubAssigin, TokenType.DivAssigin
         ] },
     };
 
@@ -228,7 +235,7 @@ public static class Lexer
                     
                     tokens.Add(Tokenize(token, TokenType.StringLiteralValue, i, j));
 
-                    i = j+1;
+                    i = j;
                 }
 
                 // Igonore comments

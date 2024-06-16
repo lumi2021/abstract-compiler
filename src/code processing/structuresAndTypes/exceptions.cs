@@ -25,9 +25,12 @@ public class MoreThanOneNamespaceException() : EvaluationException() {}
 public class OutOfPlaceCodeException() : EvaluationException() {}
 public class InvalidNamingException() : EvaluationException() {}
 
+public class InvalidMethodOverloadingException() : EvaluationException() {}
+
 public abstract class NotFoundException() : EvaluationException() {}
 
 public class MethodNotFoundException() : NotFoundException() {}
+public class MethodOverloadNotFoundException() : NotFoundException() {}
 public class FieldNotFoundException() : NotFoundException() {}
 public class LocalVariableNotFoundException() : NotFoundException() {}
 

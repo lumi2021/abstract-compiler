@@ -1,13 +1,15 @@
 namespace Std.Console
 {
 
-    func void Log(i32 value)
+    func void Log(i64 value)
+    func void Log(string content)
     
 }
 
 namespace Std.Memory
 {
 
-    func i64 GenArray(i64 ptr, i32 len)
+    func i64 GenArray(i32 len)
+    func i64 LoadString(string source)
     
 }

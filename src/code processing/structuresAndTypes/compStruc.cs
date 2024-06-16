@@ -258,7 +258,30 @@ public class TypeItem : CompStruct
 
         _type = t;
     }
+    public TypeItem(PrimitiveTypeList type) : base(null!)
+    {
+        ILangType t = new PrimitiveType(type, TypeDefKind.Value);
+
+        _type = t;
+    }
 
     public override string ToString() => _type.ToString() ?? "null";
     public string ToAsmString() => _type.ToIlString() ?? "nil";
+
+    public static bool operator ==(TypeItem a, TypeItem b) => a.Equals(b);
+    public static bool operator !=(TypeItem a, TypeItem b) => !a.Equals(b);
+
+    public override bool Equals(object? obj)
+    {
+        if (obj is TypeItem @tItem)
+        {
+            if (_type is PrimitiveType @pType1 && @tItem.Value is PrimitiveType @pType2)
+            {
+                return @pType1.Value == @pType2.Value;
+            }
+        }
+
+        return false;
+    }
+    public override int GetHashCode() => base.GetHashCode();
 }

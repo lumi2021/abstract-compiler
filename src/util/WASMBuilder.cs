@@ -1,3 +1,4 @@
+using System.Text;
 using Compiler.CodeProcessing.CompilationStructuring;
 using static Compiler.Util.Compilation.WASMBuilder.WasmInstructions;
 
@@ -17,33 +18,53 @@ public class WASMBuilder
 
     public class WasmModule
     {
-        public List<WasmImportedMethod> _imports = [];
-        public List<WasmMethod> _methods = [];
+        private List<WasmImportedMethod> _imports = [];
+        private List<WasmMethod> _methods = [];
+
+        private List<WasmData> _ROData = [];
+        private ulong _emptyDataPtr = 4;
 
         public WasmImportedMethod CreateImport(string methodName, TypeItem returnType, string[] path)
         {
-            var import = new WasmImportedMethod(methodName, WasmHelper.AbsType2Wasm(returnType), path);
+            var import = new WasmImportedMethod(this, methodName, WasmHelper.AbsType2Wasm(returnType), path);
             _imports.Add(import);
             return import;
         }
 
         public WasmMethod CreateMethod(string methodName, TypeItem returnType)
         {
-            var method = new WasmMethod(methodName, WasmHelper.AbsType2Wasm(returnType));
+            var method = new WasmMethod(this, methodName, WasmHelper.AbsType2Wasm(returnType));
             _methods.Add(method);
             return method;
         }
 
+        public ulong AppendReadOnlyData(string label, string value)
+        {   
+            int dataLen = Encoding.UTF8.GetBytes(value).Length;
+            byte[] dataLenInBytes = BitConverter.GetBytes((uint) dataLen);
+
+            string lenBinaryStr = "";
+
+            foreach (var i in dataLenInBytes) lenBinaryStr += $"\\{i:X2}";
+
+            _ROData.Add(new (label, _emptyDataPtr, lenBinaryStr, value));
+
+            var ptr = _emptyDataPtr;
+            _emptyDataPtr += (ulong)dataLen + 4;
+
+            return ptr;
+        }
+
         public string ToAssemblyString()
         {
-            string str = "(module\n";
-
-            str += "\n(export \"memory\" (memory $mem))\n";
+            string str = "(module";
             
             foreach (var import in _imports)
             {
-                str += $"\t{import.ToAssemblyString()}\n";
+                str += $"\n\t{import.ToAssemblyString()}";
             }
+
+            str += "\n\n\t(memory (export \"mem\") 1)\n";
 
             if (_imports.Count > 0) str += "\n";
 
@@ -54,16 +75,29 @@ public class WASMBuilder
                 str += "\n";
             }
 
+            byte[] numberAsBytes = BitConverter.GetBytes((uint)_emptyDataPtr);
+            str += "\t(data (i32.const 0) \"";
+            foreach (var i in numberAsBytes) str += $"\\{i:X2}";
+            str += "\")\n";
+
+            foreach (var data in _ROData)
+            {
+                str += $"\t{data.ToAssemblyString()}\n";
+            }
+
             str += ")";
 
             return str;
         }
     }
 
-    public class WasmImportedMethod(string name, WasmType returnType, string[] path)
+    public class WasmImportedMethod(WasmModule module, string name, WasmType returnType, string[] path)
     {
+        private WasmModule _moduleRef = module;
+        public WasmModule Module => _moduleRef;
+
         public readonly List<string> path = [.. path];
-        public readonly WasmMethod function = new(name, returnType, true);
+        public readonly WasmMethod function = new(module, name, returnType, true);
 
         public string ToAssemblyString()
         {
@@ -79,8 +113,11 @@ public class WASMBuilder
         }
     }
 
-    public class WasmMethod(string name, WasmType returnType, bool isImported = false)
+    public class WasmMethod(WasmModule module, string name, WasmType returnType, bool isImported = false)
     {
+        private WasmModule _moduleRef = module;
+        public WasmModule Module => _moduleRef;
+
         private string _name = name;
         private Dictionary<string, WasmType> _parameters = [];
         private List<WasmType> _localVariables = [];
@@ -149,7 +186,8 @@ public class WASMBuilder
                 if (_instructions.Count > 0) str += "\n";
             }
 
-            if (!_isImported) str += '\n';
+            if (!_isImported && _instructions.Count > 0)
+                str += '\n';
 
             foreach (var i in _instructions)
             {
@@ -163,11 +201,33 @@ public class WASMBuilder
         }
     }
 
+    public class WasmData(string label, ulong adress, params string[] values)
+    {
+        private string _label = label;
+        private ulong _adress = adress;
+        private string[] _values = values;
+
+        public string ToAssemblyString()
+        {
+            string str = $"(data (i32.const {_adress})";
+
+            foreach (var i in _values)
+                str += " \"" + i + '"';
+
+            str += ')';
+
+            return str;
+        }
+    }
+
+
     public enum WasmType {
         i32,
         i64,
         f32,
         f64,
+
+        _string,
 
         _void
     }
@@ -182,6 +242,7 @@ public class WASMBuilder
                 WasmType.f32 => "f32",
                 WasmType.f64 => "f64",
                 WasmType._void => ";;void",
+                WasmType._string => "i64",
                 _ => "???"
             };
     
@@ -213,7 +274,7 @@ public class WASMBuilder
                     PrimitiveTypeList.Boolean or
                     PrimitiveTypeList.Character => WasmType.i32,
 
-                    PrimitiveTypeList.String => throw new NotImplementedException(),
+                    PrimitiveTypeList.String => WasmType._string,
                     PrimitiveTypeList.Pointer => throw new NotImplementedException(),
                     PrimitiveTypeList.__Generic__Number => throw new NotImplementedException(),
                 
