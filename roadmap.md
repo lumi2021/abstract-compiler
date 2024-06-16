@@ -5,8 +5,8 @@ The steps of the entire proccess to finish the compiler
 ### external
 ```
 [ ] console program help
-[ ] more compiling opetions
-[ ] more debugging opetions
+[ ] more compiling options
+[ ] more debugging options
 ```
 
 ### lexing
