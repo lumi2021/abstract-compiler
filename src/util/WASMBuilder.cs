@@ -155,8 +155,21 @@ public class WASMBuilder
             if (!_isImported)
             {
                 var ifblock = new WasmIf();
-                _instructions.Add(ifblock);
+
+                Emit(ifblock);
+
+                if (_ifStack.Count > 0 && _ifStack[^1].ElseEnabled)
+                    _ifStack.RemoveAt(_ifStack.Count - 1);
+
                 _ifStack.Add(ifblock);
+            }
+        }
+
+        public void EmitElse()
+        {
+            if (!_isImported)
+            {
+               _ifStack[^1].ElseEnabled = true;
             }
         }
 
@@ -295,20 +308,40 @@ public class WASMBuilder
         }
 
         // complex instructions
-        public readonly struct WasmIf() : IWasmInstruction
+        public class WasmIf() : IWasmInstruction
         {
 
+            private bool _elseEnabled = false;
+            public bool ElseEnabled
+            {
+                get => _elseEnabled;
+                set => _elseEnabled = true;
+            }
+
             private readonly List<IWasmInstruction> _instructions = [];
+            private readonly List<IWasmInstruction> _elseInstructions = [];
 
             public void Emit(IWasmInstruction instruction)
-                => _instructions.Add(instruction);
+            {
+                if (!_elseEnabled)
+                    _instructions.Add(instruction);
+                else
+                    _elseInstructions.Add(instruction);
+            }
 
             public override string ToString()
             {
                 string str = "(if (then\n";
 
                 foreach (var i in _instructions)
-                str += $"\t{i}\n";
+                    str += $"\t{i}\n";
+
+                if (_elseEnabled)
+                {
+                    str += ")\n(else\n";
+                    foreach (var i in _elseInstructions)
+                        str += $"\t{i}\n";
+                }
 
                 str += "))";
 

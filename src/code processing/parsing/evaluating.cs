@@ -356,6 +356,9 @@ public static class Evaluation
             EvaluateExpressionIdentifiers(@ifstat.condition, mt, mt.Parent, localVariables);
             if (@ifstat.result != null)
                 EvaluateStatementIdentifiers(@ifstat.result, mt, localVariables, ref localIndex);
+            
+            if (@ifstat.elseStatement != null)
+                EvaluateElseIdentifiers(@ifstat.elseStatement, mt, localVariables, ref localIndex);
         }
 
         else mt.ScriptRef.ThrowError(
@@ -482,6 +485,18 @@ public static class Evaluation
 
     }
 
+    private static void EvaluateElseIdentifiers(ElseStatementNode elseStat, MethodItem? mt,  List<LocalVar> decVars, ref int localIndex)
+    {
+        if (elseStat.condition != null)
+            EvaluateExpressionIdentifiers(elseStat.condition, mt, mt?.Parent, decVars);
+
+        if (elseStat.result != null)
+            EvaluateStatementIdentifiers(elseStat.result, mt!, decVars, ref localIndex);
+
+        if (@elseStat.elseStatement != null)
+                EvaluateElseIdentifiers(@elseStat.elseStatement, mt, decVars, ref localIndex);
+    }
+
     private static TypeItem EvaluateExpressionType(ExpressionNode exp)
     {
         Console.WriteLine($"{exp} ({exp.GetType().Name})");
@@ -570,7 +585,6 @@ public static class Evaluation
 
     private static IntermediateInstruction[] StatementToAsm(StatementNode stat)
     {
-        
         // Emit an expression
         if (stat is ExpressionNode @exp)
         {
@@ -596,8 +610,12 @@ public static class Evaluation
             return IfToAsm(@ifstat);
         }
 
-        else throw new InstructionProcessingNotImplementedException(stat.GetType().Name);
+        else if (stat is ElseStatementNode @elsestat)
+        {
+            return ElseToAsm(@elsestat);
+        }
 
+        else throw new InstructionProcessingNotImplementedException(stat.GetType().Name);
     }
 
     private static IntermediateInstruction[] ExpressionToAsm(ExpressionNode exp, TypeItem? expectedType = null)
@@ -698,7 +716,32 @@ public static class Evaluation
         // Append scope content
         instructions.AddRange(StatementToAsm(ifstat.result!));
 
+        if (ifstat.elseStatement != null)
+            instructions.AddRange(ElseToAsm(ifstat.elseStatement));
+
         instructions.Add(OpCode.EndIf());
+
+        return [.. instructions];
+    }
+
+    private static IntermediateInstruction[] ElseToAsm(ElseStatementNode elseStat)
+    {
+        List<IntermediateInstruction> instructions = [];
+
+        instructions.Add(OpCode.Else());
+
+        // Get the condition and calculate the conditional
+        if (elseStat.condition != null)
+        {
+            instructions.AddRange(ExpressionToAsm(elseStat.condition));
+            instructions.Add(OpCode.If(ConditionMethod.True));
+        }
+
+        // Append scope content
+        instructions.AddRange(StatementToAsm(elseStat.result!));
+
+        if (elseStat.elseStatement != null)
+            instructions.AddRange(ElseToAsm(elseStat.elseStatement));
 
         return [.. instructions];
     }

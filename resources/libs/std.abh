@@ -4,6 +4,8 @@ namespace Std.Console
     func void Log(i64 value)
     func void Log(string content)
     
+    func string Read()
+
 }
 
 namespace Std.Memory

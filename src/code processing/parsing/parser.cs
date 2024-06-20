@@ -61,6 +61,7 @@ public static class Parser
 
             TokenType.ReturnKeyword => ParseReturnStatement(),
             TokenType.AsmKeyword => ParseInlineAsm(),
+
             TokenType.IfKeyword => ParseIfStatement(),
 
             _ => ParseExpression(),
@@ -205,7 +206,48 @@ public static class Parser
         Expect(TokenType.RightArrowOperator, "Expected right arow after conditional expression and before the conditioned statement!");
         ifStat.result = ParseStatement();
 
+        while (Current().type == TokenType.LineFeed) Eat();
+
+        if (Current().type == TokenType.ElifKeyword)
+            ifStat.elseStatement = ParseElifStatement();
+        
+        else if (Current().type == TokenType.ElseKeyword)
+            ifStat.elseStatement = ParseElseStatement();
+
         return ifStat;
+    }
+    
+    private static ElseStatementNode ParseElifStatement()
+    {
+        var elseStat = new ElseStatementNode();
+
+        Eat();
+
+        elseStat.condition = ParseExpression();
+        Expect(TokenType.RightArrowOperator, "Expected right arow after conditional expression and before the conditioned statement!");
+        elseStat.result = ParseStatement();
+
+        while (Current().type == TokenType.LineFeed) Eat();
+
+        if (Current().type == TokenType.ElifKeyword)
+            elseStat.elseStatement = ParseElifStatement();
+        
+        else if (Current().type == TokenType.ElseKeyword)
+            elseStat.elseStatement = ParseElseStatement();
+
+        return elseStat;
+    }
+
+    private static ElseStatementNode ParseElseStatement()
+    {
+        var elseStat = new ElseStatementNode();
+
+        Eat();
+
+        Expect(TokenType.RightArrowOperator, "Expected right arow after 'else' and before the conditioned statement!");
+        elseStat.result = ParseStatement();
+
+        return elseStat;
     }
     #endregion
 
@@ -638,7 +680,7 @@ public static class AstWriter
 
         else if (statement is IfStatementNode @ifstat)
         {
-            return $"if {@ifstat.condition} => {@ifstat.result}";
+            return $"{@ifstat}";
         }
 
         return $"<# undefined statement {statement.GetType().Name} #>";

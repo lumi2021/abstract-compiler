@@ -78,14 +78,9 @@ public class CompilationRoot(StatementNode referTo) : CompStruct(referTo)
                 }
                 else
                 {
-                    int level = 0;
                     foreach (var i in m.interLang)
                     {
-                        if (i.instruction == Instruction.EndIf) level--;
-
-                        sb.AppendLine($"\t\t{"".PadLeft(level * 4)}{i}");
-
-                        if (i.instruction == Instruction.If) level++;
+                        sb.AppendLine($"\t\t{i}");
                     }
                 }
 

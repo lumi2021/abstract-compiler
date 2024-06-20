@@ -117,6 +117,10 @@ public class WasmCompiler : BaseCompiler
                 method.EmitIf();
                 break;
 
+            case Instruction.Else:
+                method.EmitElse();
+                break;
+
             case Instruction.EndIf:
                 method.EndIf();
                 break;

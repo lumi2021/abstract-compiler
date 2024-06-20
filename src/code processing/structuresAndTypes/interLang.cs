@@ -26,17 +26,16 @@ public static class OpCode
 
     public static IntermediateInstruction CallStatic(MethodItem method) => new(Instruction.CallStatic, [method.GetGlobalReferenceIL()]);
 
-
     public static IntermediateInstruction Ret() => new(Instruction.Ret, []);
 
     public static IntermediateInstruction Jump(int offset) => new(Instruction.Jump, [offset.ToString()]);
     
     public static IntermediateInstruction If(ConditionMethod condition)
         => new(Instruction.If, [condition.ToString()]);
-
     public static IntermediateInstruction If(ConditionMethod condition, string value)
         => new(Instruction.If, [condition.ToString(), value]);
-
+    public static IntermediateInstruction Else()
+        => new(Instruction.Else, []);
     public static IntermediateInstruction EndIf()
         => new(Instruction.EndIf, []);
 }
@@ -71,6 +70,7 @@ public readonly struct IntermediateInstruction(Instruction instruction, string[]
 
             Instruction.Jump             => "jump",
             Instruction.If               => "if.{0}",
+            Instruction.Else             => "else",
             Instruction.EndIf            => "endif",
 
             Instruction.Ret             => "ret",
@@ -118,6 +118,7 @@ public enum Instruction : byte
 
     Jump,
     If,
+    Else,
     EndIf,
     Ret
 }

@@ -87,7 +87,40 @@ public class IfStatementNode : StatementNode
     public ExpressionNode condition = null!;
     public StatementNode? result = null;
 
-    public override string ToString() => $"if {condition} => {result}";
+    public ElseStatementNode? elseStatement = null;
+
+    public override string ToString()
+    {
+        string str = $"if {condition} => {result}";
+
+        if (elseStatement != null)
+            str += $"\n{elseStatement}";
+
+        return str;
+    }
+}
+
+public class ElseStatementNode : StatementNode
+{
+    public ExpressionNode? condition = null;
+    public StatementNode? result = null;
+
+    public ElseStatementNode? elseStatement = null;
+
+    public override string ToString()
+    {
+        string str = "";
+        
+        if (condition != null)
+            str += $"elif {condition} => {result}";
+        else
+            str += $"else => {result}";
+
+        if (elseStatement != null)
+            str += $"\n{elseStatement}";
+
+        return str;
+    }
 }
 
 public class ReturnStatementNode : StatementNode
