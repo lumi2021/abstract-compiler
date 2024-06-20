@@ -29,8 +29,8 @@ The steps of the entire proccess to finish the compiler
 ║... ╠══ [x] inline assembly line
 ║... ╠══ [x] inline assembly block
 ║... ╠══ [x] conditional `if`
-║... ╠══ [ ] conditional `elif`
-║... ╠══ [ ] conditional `else`
+║... ╠══ [x] conditional `elif`
+║... ╠══ [x] conditional `else`
 ║... ╠══ [ ] looping `while`
 ║... ╠══ [ ] looping `for`
 ║... ╠══ [ ] looping `do .. while`
