@@ -34,6 +34,7 @@ The steps of the entire proccess to finish the compiler
 ║... ╠══ [ ] looping `while`
 ║... ╠══ [ ] looping `for`
 ║... ╠══ [ ] looping `do .. while`
+║... ╠══ [ ] converting `as` operator
 ║... ╚══ [ ] breaking loop
 ╠══ [ ] Expressions:
 ║... ╠══ [x] literal numbers
@@ -64,6 +65,7 @@ The steps of the entire proccess to finish the compiler
 ╠══ [x] stack size counter
 ╠══ [x] scoped stack size counter
 ╠══ [x] if/else scoping
+╠══ [x] typing conversion
 ╠══ [x] ast to abstracted instructions
 ╠══ [ ] optimizations
 ║... ╠══ [\] operations in comptime

@@ -146,6 +146,61 @@ public static class Evaluation
             }
         }
 
+        // foreach to evaluate types and type casting
+        foreach (var mt in allMethods)
+        {
+            foreach (var l in mt.codeStatements.ToArray())
+            {
+
+                if (l is ExpressionNode @expNode)
+                {
+
+                    if (l is AssiginmentExpressionNode @assigin)
+                    {
+                        var t1 = EvaluateExpressionType(@assigin.assigne);
+                        var t2 = EvaluateExpressionType(@assigin.value);
+
+                        if (t1 != t2)
+                        {
+                            if (t1.IsAssignableTo(t2))
+                                Console.WriteLine("\nImplicit conversion here!\n");
+                            
+                            else mt.ScriptRef.ThrowError(
+                                new InvalidImplicitCastException(t1, t2));
+                        }
+                    }
+
+                    else if (l is MethodCallNode @call)
+                    {
+                        for (var i = 0; i < @call.arguments.Count; i++)
+                        {
+                            var arg = @call.arguments[i];
+
+                            var t1 = EvaluateExpressionType(arg);
+                            var t2 = (@call.target.refersTo as MethodItem)!.parameters[i].type;
+
+                            if (t1 != t2)
+                            {
+                                if (t1.IsAssignableTo(t2))
+                                {
+                                    @call.arguments[i] = new TypeCastingExpressionNode()
+                                    {
+                                        expression = arg,
+                                        type = (t2.nodeReference as TypeNode)!
+                                    };
+                                }
+                                
+                                else mt.ScriptRef.ThrowError(
+                                    new InvalidImplicitCastException(t1, t2));
+                            }
+                        }
+                    }
+
+                }
+
+            }
+        }
+
         WritePass(compilation, 2);
 
         // compile into intermediate asm
@@ -304,8 +359,8 @@ public static class Evaluation
 
     private static MethodCallNode ReduceMethodCall(MethodCallNode call)
     {
-        for(var i = 0; i < call.parameters.Count; i++)
-            call.parameters[i] = ReduceExpression(call.parameters[i]);
+        for(var i = 0; i < call.arguments.Count; i++)
+            call.arguments[i] = ReduceExpression(call.arguments[i]);
         
         return call;
     }
@@ -380,6 +435,11 @@ public static class Evaluation
             EvaluateExpressionIdentifiers(@unExp.expression, mt, ns, decVars);
         }
         
+        else if (exp is TypeCastingExpressionNode @tCast)
+        {
+            EvaluateExpressionIdentifiers(@tCast.expression, mt, ns, decVars);
+        }
+
         else if (exp is AssiginmentExpressionNode @ass)
         {
             EvaluateExpressionIdentifiers(@ass.assigne, mt, ns, decVars);
@@ -417,9 +477,9 @@ public static class Evaluation
             {
 
                 // process arguments
-                for (var i = 0; i < @methodCall.parameters.Count; i++)
+                for (var i = 0; i < @methodCall.arguments.Count; i++)
                 {
-                    EvaluateExpressionIdentifiers(@methodCall.parameters[i], mt, ns, decVars);
+                    EvaluateExpressionIdentifiers(@methodCall.arguments[i], mt, ns, decVars);
                 }
                 
                 // evaluate arguments types
@@ -431,10 +491,10 @@ public static class Evaluation
                 MethodItem method = null!;
                 foreach (var mtd in overloads)
                 {
-                    if (@methodCall.parameters.Count != mtd.parameters.Count) continue;
+                    if (@methodCall.arguments.Count != mtd.parameters.Count) continue;
 
                     // just to make sure hehe
-                    if (@methodCall.parameters.Count == 0 && mtd.parameters.Count == 0)
+                    if (@methodCall.arguments.Count == 0 && mtd.parameters.Count == 0)
                     {
                         method = mtd;
                         break;
@@ -444,7 +504,7 @@ public static class Evaluation
                     {
 
                         var pType = mtd.parameters[i].type;
-                        var aType = EvaluateExpressionType(@methodCall.parameters[i]);
+                        var aType = EvaluateExpressionType(@methodCall.arguments[i]);
 
                         if (pType == aType ||
                         (IsNumericType(pType.Value) && IsNumericType(aType.Value)))
@@ -462,7 +522,7 @@ public static class Evaluation
                     @methodCall.target = method.GetGlobalReference();
                     @methodCall.target.refersTo = method;
 
-                    foreach (var arg in @methodCall.parameters)
+                    foreach (var arg in @methodCall.arguments)
                     {
                         EvaluateExpressionIdentifiers(arg, mt, ns, decVars);
                     }
@@ -509,7 +569,9 @@ public static class Evaluation
 
         else if (exp is IdentifierNode @ident) return @ident.refersToType;
 
-        throw new NotImplementedException($"{exp.GetType().Name} is not supported.");
+        else if (exp is TypeCastingExpressionNode @tCast) return new TypeItem(@tCast.type);
+
+        throw new NotImplementedException($"{exp.GetType().Name} is still not supported.");
     }
 
     private static bool IsNumericType(ILangType t)
@@ -691,11 +753,18 @@ public static class Evaluation
 
         else if (exp is MethodCallNode @mCall)
         {
-            foreach (var i in @mCall.parameters)
+            foreach (var i in @mCall.arguments)
                 rist.AddRange(ExpressionToAsm(i));
 
             if (@mCall.target.refersTo is MethodItem @method)
                 rist.Add(OpCode.CallStatic(@method));
+        }
+
+        else if (exp is TypeCastingExpressionNode @tCast)
+        {
+            rist.AddRange(ExpressionToAsm(@tCast.expression));
+            string IlTypeString = new TypeItem(@tCast.type).Value.ToIlString();
+            rist.Add(OpCode.Conv(IlTypeString));
         }
 
         else throw new NotImplementedException(exp.GetType().Name);

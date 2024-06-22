@@ -325,7 +325,7 @@ public static class Parser
             return new UnaryExpressionNode()
             {
                 expOperator = Eat(),
-                expression = ParsePrimaryExpression()
+                expression = ParseTypeCasting()
             };
 
         }
@@ -341,7 +341,24 @@ public static class Parser
             };
         }
 
-        return ParsePrimaryExpression();
+        return ParseTypeCasting();
+    }
+
+    private static ExpressionNode ParseTypeCasting()
+    {
+        var exp = ParsePrimaryExpression();
+
+        if (Current().type == TokenType.AsKeyword)
+        {
+            Eat();
+            return new TypeCastingExpressionNode()
+            {
+                expression = exp,
+                type = ParseType()
+            };
+        }
+
+        return exp;
     }
 
     private static ExpressionNode ParsePrimaryExpression()
@@ -402,7 +419,7 @@ public static class Parser
 
         Expect(TokenType.RightParenthesisChar, "Unexpected token! Expected closing parenthesis!");
 
-        return new MethodCallNode() { target = symbol, parameters = args };
+        return new MethodCallNode() { target = symbol, arguments = args };
     }
     #endregion
 
@@ -698,6 +715,9 @@ public static class AstWriter
             return ProcessBinaryNode(@binaryExp);
         else if (expression is UnaryExpressionNode @unaryExp)
             return ProcessUnaryNode(@unaryExp);
+
+        else if (expression is TypeCastingExpressionNode @typeCast)
+            return $"{ProcessExpression(@typeCast.expression)} as {@typeCast.type}";
         
         else if (expression is ReferenceModifier @refMod)
             return @refMod.ToString();

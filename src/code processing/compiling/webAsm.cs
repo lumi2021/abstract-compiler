@@ -1,4 +1,3 @@
-using System.Text;
 using Compiler.CodeProcessing.CompilationStructuring;
 using Compiler.CodeProcessing.IntermediateAssembyLanguage;
 using Compiler.CodeProcessing.Scripts;
@@ -9,6 +8,8 @@ namespace Compiler.CodeProcessing.Compiling;
 
 public class WasmCompiler : BaseCompiler
 {
+
+    private static readonly VirtualStack vstack = new();
 
     public override void Compile(CompilationRoot program, string oPath, string oFile)
     {
@@ -53,7 +54,7 @@ public class WasmCompiler : BaseCompiler
                 if (ns.ScriptSourceReference is not HeaderScript)
                 {
 
-                    var method = module.CreateMethod(mt.GetGlobalReferenceAsm(), mt.returnType);
+                    var method = module.CreateMethod(mt.GetGlobalReferenceAsm(), mt.returnType, mt);
 
                     foreach (var i in mt.parameters) method.AddParameter(i.identifier.ToString(), i.type);
                     foreach (var i in mt.LocalData) method.AddLocal(i);
@@ -77,15 +78,17 @@ public class WasmCompiler : BaseCompiler
         switch (i.instruction)
         {
             case Instruction.GetLocal:
+                vstack.Push(GetMethodLocalData(method, int.Parse(i.parameters[0])).ToAsmString());
                 method.Emit(new OpCode.Local(OpCode.LocalMode.get, int.Parse(i.parameters[0]) + method.ParametersLength));
                 break;
 
             case Instruction.SetLocal:
+                var tSetLc = vstack.Pop();
                 method.Emit(new OpCode.Local(OpCode.LocalMode.set, int.Parse(i.parameters[0]) + method.ParametersLength));
                 break;
             
             case Instruction.LdConst:
-
+                vstack.Push(i.parameters[0]);
                 if (i.parameters[0] == "str")
                 {
                     ulong ptr = method.Module.AppendReadOnlyData("string", i.parameters[1]);
@@ -101,16 +104,45 @@ public class WasmCompiler : BaseCompiler
 
                     method.Emit(new OpCode.Const(String2WasmType(i.parameters[0]), value));
                 }
-                
                 break;
 
             case Instruction.CallStatic:
-                string[] methodSections = i.parameters[0].Split(':');
+                string[] methodSections = i.parameters[1].Split(':');
+
+                vstack.Pop(methodSections[1].Split('?')[1].Split('_', StringSplitOptions.RemoveEmptyEntries).Length);
+
                 method.Emit(new OpCode.Call(methodSections[0] + '.' + methodSections[1]));
+                vstack.Push(i.parameters[0]);
                 break;
 
             case Instruction.Ret:
+                vstack.Pop();
                 method.Emit(new OpCode.Return());
+                vstack.Clear();
+                break;
+
+            case Instruction.Conv:
+                var tConv = vstack.Pop();
+
+                if (tConv == "str" || i.parameters[0] == "str")
+                    method.Emit(new OpCode.Call($"Std.Type.Cast_{i.parameters[0]}?{tConv}"));
+                
+                else
+                {
+                    string aSize = tConv[1..];
+                    string bSize = i.parameters[0][1..];
+
+                    if ((aSize == "8" || aSize == "16") && bSize == "32") break;
+
+                    else if ((aSize == "8" || aSize == "16" || aSize == "32") && bSize == "64")
+                        method.Emit(new OpCode.CastNumericUp(WASMBuilder.WasmType.i32, WASMBuilder.WasmType.i64, i.parameters[0][1]=='i'));
+                    
+                    else if ((bSize == "8" || bSize == "16" || bSize == "32") && aSize == "64")
+                        method.Emit(new OpCode.CastNumericDown(WASMBuilder.WasmType.i64, WASMBuilder.WasmType.i32));
+                }
+
+
+                vstack.Push(i.parameters[0]);
                 break;
 
             case Instruction.If:
@@ -132,6 +164,9 @@ public class WasmCompiler : BaseCompiler
 
     }
 
+    private static TypeItem GetMethodLocalData(WASMBuilder.WasmMethod method, int index)
+        => method.src.LocalData[index];
+    
     private static WASMBuilder.WasmType String2WasmType(string str)
     {
         return str switch
@@ -152,6 +187,45 @@ public class WasmCompiler : BaseCompiler
 
             _ => throw new NotImplementedException(str)
         };
+    }
+
+
+    class VirtualStack
+    {
+
+        public readonly List<string> stack = [];
+
+        public int Length => stack.Count;
+        
+        public void Clear() => stack.Clear();
+
+        public void Push(string type)
+        {
+            if (type == "void") return;
+
+            //Console.WriteLine("pushed");
+            stack.Add(type);
+            //Console.WriteLine(this);
+        }
+        public string Pop(int count = 1)
+        {
+            if (count == 0) return "";
+
+            //Console.WriteLine("poped " + count);
+            var a = stack[^1];
+
+            for (int i = 0; i < count; i++)
+            {
+                a = stack[^1];
+                stack.RemoveAt(Length - 1);
+            }
+
+            //Console.WriteLine(this);
+
+            return a;
+        }
+
+        public override string ToString() => $"###\n{string.Join('\n', stack)}\n###";
     }
 
 }

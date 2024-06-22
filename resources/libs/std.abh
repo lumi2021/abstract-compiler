@@ -8,6 +8,11 @@ namespace Std.Console
 
 }
 
+namespace Std.Type
+{
+    func i32 Cast_i32(string value)
+}
+
 namespace Std.Memory
 {
 

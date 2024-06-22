@@ -31,9 +31,9 @@ public class WASMBuilder
             return import;
         }
 
-        public WasmMethod CreateMethod(string methodName, TypeItem returnType)
+        public WasmMethod CreateMethod(string methodName, TypeItem returnType, MethodItem src)
         {
-            var method = new WasmMethod(this, methodName, WasmHelper.AbsType2Wasm(returnType));
+            var method = new WasmMethod(this, methodName, WasmHelper.AbsType2Wasm(returnType), src);
             _methods.Add(method);
             return method;
         }
@@ -97,7 +97,7 @@ public class WASMBuilder
         public WasmModule Module => _moduleRef;
 
         public readonly List<string> path = [.. path];
-        public readonly WasmMethod function = new(module, name, returnType, true);
+        public readonly WasmMethod function = new(module, name, returnType, null!, true);
 
         public string ToAssemblyString()
         {
@@ -113,14 +113,18 @@ public class WASMBuilder
         }
     }
 
-    public class WasmMethod(WasmModule module, string name, WasmType returnType, bool isImported = false)
+    public class WasmMethod(WasmModule module, string name, WasmType returnType, MethodItem source, bool isImported = false)
     {
+        public readonly MethodItem src = source;
+
         private WasmModule _moduleRef = module;
         public WasmModule Module => _moduleRef;
 
         private string _name = name;
         private Dictionary<string, WasmType> _parameters = [];
         private List<WasmType> _localVariables = [];
+
+        public WasmType[] LocalVariables => [.. _localVariables];
 
         private List<IWasmInstruction> _instructions = [];
         private List<WasmIf> _ifStack = [];
@@ -384,6 +388,22 @@ public class WASMBuilder
         public readonly struct Return() : IWasmInstruction
         {
             override public string ToString() => $"return";
+        }
+
+
+        public readonly struct CastNumericUp(WasmType from, WasmType to, bool signed) : IWasmInstruction
+        {
+            private readonly string result = WasmHelper.Type2Str(to) +
+            ".extend_" + WasmHelper.Type2Str(from) + "_" + (signed ? "s" : "u");
+
+            override public string ToString() => result;
+        }
+        public readonly struct CastNumericDown(WasmType from, WasmType to) : IWasmInstruction
+        {
+            private readonly string result = WasmHelper.Type2Str(to) +
+            ".wrap_" + WasmHelper.Type2Str(from);
+
+            override public string ToString() => result;
         }
 
 

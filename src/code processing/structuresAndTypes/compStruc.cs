@@ -279,4 +279,19 @@ public class TypeItem : CompStruct
         return false;
     }
     public override int GetHashCode() => base.GetHashCode();
+
+    public bool IsAssignableTo(TypeItem type) => IsAssignableTo(this, type);
+
+    public static bool IsAssignableTo(TypeItem a, TypeItem b)
+    {
+        if (a == b) return true;
+
+        if (a.Value is PrimitiveType @prim1 && b.Value is PrimitiveType @prim2)
+        {
+            if (@prim1.Kind != PrimitiveTypeKind.IntegerNumeric) return @prim1.Kind == @prim2.Kind;
+            else return @prim1.MinValue >= @prim2.MinValue && @prim1.MaxValue <= @prim2.MaxValue;
+        }
+
+        return false;
+    }
 }

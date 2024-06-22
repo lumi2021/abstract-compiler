@@ -51,6 +51,8 @@ public static class Lexer
         { "return", TokenType.ReturnKeyword },
         { "asm", TokenType.AsmKeyword },
 
+        { "as", TokenType.AsKeyword },
+
         // values
         { "null", TokenType.NullKeyword },
         { "true", TokenType.TrueKeyword },
@@ -370,6 +372,8 @@ public enum TokenType {
     ForKeyword,             // for
     DoKeyword,              // do
     BreakKeyword,           // break
+
+    AsKeyword,              // as
 
     ReturnKeyword,          // return
     AsmKeyword,             // asm

@@ -207,6 +207,24 @@ public class UnaryExpressionNode : ExpressionNode
         return str;
     }
 }
+public class TypeCastingExpressionNode : ExpressionNode
+{
+    public ExpressionNode expression = null!;
+    public TypeNode type = null!;
+
+    public override string ToString()
+    {
+        var str = $"";
+
+        if (expression is BinaryExpressionNode || expression is UnaryExpressionNode)
+            str += $"({expression})";
+        else str += expression.ToString();
+
+        str += $" as {type}";
+
+        return str;
+    }
+}
 
 
 public class IdentifierNode(TypeItem? type = null, int? local = null) : ExpressionNode
@@ -247,9 +265,9 @@ public class MethodCallNode : ExpressionNode
 {
 
     public Identifier target = new();
-    public List<ExpressionNode> parameters = [];
+    public List<ExpressionNode> arguments = [];
 
-    public override string ToString() => $"{target}({string.Join(", ", parameters)})";
+    public override string ToString() => $"{target}({string.Join(", ", arguments)})";
 
 }
 

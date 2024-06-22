@@ -24,7 +24,9 @@ public static class OpCode
     public static IntermediateInstruction Div() => new(Instruction.Div, []);
     public static IntermediateInstruction Rest() => new(Instruction.Rest, []);
 
-    public static IntermediateInstruction CallStatic(MethodItem method) => new(Instruction.CallStatic, [method.GetGlobalReferenceIL()]);
+    public static IntermediateInstruction Conv(string type) => new(Instruction.Conv, [type]);
+
+    public static IntermediateInstruction CallStatic(MethodItem method) => new(Instruction.CallStatic, [method.returnType.ToAsmString(), method.GetGlobalReferenceIL()]);
 
     public static IntermediateInstruction Ret() => new(Instruction.Ret, []);
 
@@ -64,9 +66,11 @@ public readonly struct IntermediateInstruction(Instruction instruction, string[]
             Instruction.Div             => "div",
             Instruction.Rest            => "rest",
 
-            Instruction.CallStatic      => "call.Static {0}",
-            Instruction.CallInstance    => "call.Instance {0}",
-            Instruction.CallVirtual     => "call.Virtual {0}",
+            Instruction.Conv            => "conv.{0}",
+
+            Instruction.CallStatic      => "call.Static {0} {1}",
+            Instruction.CallInstance    => "call.Instance {0} {1}",
+            Instruction.CallVirtual     => "call.Virtual {0} {1}",
 
             Instruction.Jump             => "jump",
             Instruction.If               => "if.{0}",
@@ -111,6 +115,8 @@ public enum Instruction : byte
     Mul,
     Div,
     Rest,
+
+    Conv,
 
     CallStatic,
     CallInstance,

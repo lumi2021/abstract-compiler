@@ -1,3 +1,4 @@
+using Compiler.CodeProcessing.CompilationStructuring;
 using Compiler.CodeProcessing.Lexing;
 
 namespace Compiler.CodeProcessing.Exeptions;
@@ -26,6 +27,15 @@ public class OutOfPlaceCodeException() : EvaluationException() {}
 public class InvalidNamingException() : EvaluationException() {}
 
 public class InvalidMethodOverloadingException() : EvaluationException() {}
+
+public class InvalidImplicitCastException(TypeItem ta, TypeItem tb) : EvaluationException()
+{
+    readonly TypeItem t1 = ta;
+    readonly TypeItem t2 = tb;
+
+    public override string ToString()
+        => $"Invalid implicit casting betweeen types {t1} and {t2}";
+}
 
 public abstract class NotFoundException() : EvaluationException() {}
 
