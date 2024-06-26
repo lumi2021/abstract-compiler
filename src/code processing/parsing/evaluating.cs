@@ -117,11 +117,10 @@ public static class Evaluation
                         if (@ass.value is NumericLiteralNode @num)
                         {
                             
-                            double value = @num.value;
+                            long value = @num.value;
 
                             // check for mismatch type
-                            var a = IsNumericType(referingType);
-                            Console.WriteLine(a);
+                            IsNumericIntegerType(referingType);
 
                             // check for overflow
                             if (value < referingType.MinValue)
@@ -139,6 +138,17 @@ public static class Evaluation
                                 @num.value = referingType.MinValue;
                             }
                         }
+
+                        if (@ass.value is FloatingLiteralNode @flt)
+                        {
+                            
+                            double value = @flt.value;
+
+                            // check for mismatch type
+                            IsNumericFloatingType(referingType);
+
+                        }
+
                         else EvaluateExpressionType(@ass.value);
 
                     }
@@ -160,13 +170,21 @@ public static class Evaluation
                         var t1 = EvaluateExpressionType(@assigin.assigne);
                         var t2 = EvaluateExpressionType(@assigin.value);
 
+                        Console.WriteLine($"{t1} <- {t2}");
+
                         if (t1 != t2)
                         {
-                            if (t1.IsAssignableTo(t2))
-                                Console.WriteLine("\nImplicit conversion here!\n");
+                            if (t2.IsAssignableTo(t1))
+                            {
+                                @assigin.value = new TypeCastingExpressionNode()
+                                {
+                                    expression = @assigin.value,
+                                    type = (t1.nodeReference as TypeNode)!
+                                };
+                            }
                             
                             else mt.ScriptRef.ThrowError(
-                                new InvalidImplicitCastException(t1, t2));
+                                new InvalidImplicitCastException(t2, t1));
                         }
                     }
 
@@ -472,7 +490,6 @@ public static class Evaluation
 
         else if (exp is MethodCallNode @methodCall)
         {
-
             if (!@methodCall.processed)
             {
 
@@ -507,7 +524,8 @@ public static class Evaluation
                         var aType = EvaluateExpressionType(@methodCall.arguments[i]);
 
                         if (pType == aType ||
-                        (IsNumericType(pType.Value) && IsNumericType(aType.Value)))
+                        (IsNumericIntegerType(pType.Value) && IsNumericIntegerType(aType.Value)) ||
+                        (IsNumericFloatingType(pType.Value) && IsNumericFloatingType(aType.Value)))
                         {
                             method = mtd;
                             break;
@@ -515,7 +533,7 @@ public static class Evaluation
                     }
                 }
 
-                if (method == null) throw new MethodOverloadNotFoundException();
+                if (method == null) mt!.ScriptRef.ThrowError(new MethodOverloadNotFoundException());
 
                 if (method != null)
                 {
@@ -538,6 +556,7 @@ public static class Evaluation
             exp is StringLiteralNode ||
             exp is BooleanLiteralNode ||
             exp is NumericLiteralNode ||
+            exp is FloatingLiteralNode ||
             exp is NullLiteralNode
         ) return;
 
@@ -559,22 +578,32 @@ public static class Evaluation
 
     private static TypeItem EvaluateExpressionType(ExpressionNode exp)
     {
-        Console.WriteLine($"{exp} ({exp.GetType().Name})");
+        //Console.WriteLine($"{exp} ({exp.GetType().Name})");
 
         if (exp is MethodCallNode @call)
             return @call.target.refersToType;
         
         else if (exp is StringLiteralNode) return new TypeItem(PrimitiveTypeList.String);
         else if (exp is NumericLiteralNode) return new TypeItem(PrimitiveTypeList.__Generic__Number);
+        else if (exp is FloatingLiteralNode) return new TypeItem(PrimitiveTypeList.__Generic__Floating);
 
         else if (exp is IdentifierNode @ident) return @ident.refersToType;
 
         else if (exp is TypeCastingExpressionNode @tCast) return new TypeItem(@tCast.type);
 
+        else if (exp is BinaryExpressionNode @binary)
+        {
+            var a = EvaluateExpressionType(@binary.leftStatement);
+            var b = EvaluateExpressionType(@binary.rightStatement);
+
+            if (a == b) return a;
+            else Console.WriteLine($"a is {a} and b is {b}");
+        }
+
         throw new NotImplementedException($"{exp.GetType().Name} is still not supported.");
     }
 
-    private static bool IsNumericType(ILangType t)
+    private static bool IsNumericIntegerType(ILangType t)
     {
         if (t is PrimitiveType @p)
         {
@@ -590,9 +619,23 @@ public static class Evaluation
                 PrimitiveTypeList.UnsignedInteger_32 or
                 PrimitiveTypeList.UnsignedInteger_64 or
                 PrimitiveTypeList.UnsignedInteger_128 or
+                PrimitiveTypeList.__Generic__Number => true,
+
+                _ => false
+            };
+        }
+
+        return false;
+    }
+    private static bool IsNumericFloatingType(ILangType t)
+    {
+        if (t is PrimitiveType @p)
+        {
+            return @p.Value switch
+            {
                 PrimitiveTypeList.Floating_32 or
                 PrimitiveTypeList.Floating_64 or
-                PrimitiveTypeList.__Generic__Number => true,
+                PrimitiveTypeList.__Generic__Floating => true,
 
                 _ => false
             };
@@ -718,6 +761,16 @@ public static class Evaluation
             
             rist.Add(OpCode.LdConst_int(IlTypeString, (long)@numericLit.value));
         }
+
+        else if (exp is FloatingLiteralNode @floatLit)
+        {
+            string IlTypeString = "f64";
+
+            if (expectedType is not null and TypeItem @pt)
+                IlTypeString = @pt.Value.ToIlString();
+            
+            rist.Add(OpCode.LdConst_float(IlTypeString, @floatLit.value));
+        }
             
         else if (exp is StringLiteralNode @stringLit)
         {
@@ -825,10 +878,10 @@ public static class Evaluation
 
         string outputDir = CodeProcess.OutputDirectory;
 
-        if (!Directory.Exists(outputDir + "/Evaluation/bin/evaluation/"))
-            Directory.CreateDirectory(outputDir + "/Evaluation/bin/evaluation/");
+        if (!Directory.Exists(outputDir + "/Evaluation/"))
+            Directory.CreateDirectory(outputDir + "/Evaluation/");
         
-        File.WriteAllText(outputDir + $"/Evaluation/bin/evaluation/pass-{pass}.txt", compilation.ToString());
+        File.WriteAllText(outputDir + $"/Evaluation/pass-{pass}.txt", compilation.ToString());
     }
 
     #endregion

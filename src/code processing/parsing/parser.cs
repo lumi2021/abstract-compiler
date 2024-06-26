@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using Compiler.CodeProcessing.AbstractSyntaxTree.Nodes;
 using Compiler.CodeProcessing.CompilationStructuring;
@@ -374,9 +375,13 @@ public static class Parser
                     return ParseMethodCall(symbol); 
                 else return new IdentifierNode() { symbol = symbol };
 
-            // Constant/literal numeric values
-            case TokenType.NumberValue:
-                return new NumericLiteralNode() { value = Double.Parse(Eat().value) };
+            // Constant/literal integer numeric values
+            case TokenType.IntegerNumberValue:
+                return new NumericLiteralNode() { value = long.Parse(Eat().value) };
+
+            // Constant/literal floating numeric values
+            case TokenType.FloatingNumberValue:
+                return new FloatingLiteralNode() { value = double.Parse(Eat().value, CultureInfo.InvariantCulture) };
 
             // Constant/literal string values
             case TokenType.StringLiteralValue:
@@ -707,7 +712,9 @@ public static class AstWriter
     {
 
         if (expression is NumericLiteralNode @numericLiteral)
-            return @numericLiteral.value.ToString();
+            return @numericLiteral.ToString();
+        else if (expression is FloatingLiteralNode @floatingLiteral)
+            return @floatingLiteral.ToString();
         else if (expression is StringLiteralNode @stringLiteral)
             return $"\"{@stringLiteral.value}\"";
         

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 using Compiler.CodeProcessing.AbstractSyntaxTree.Nodes;
 using Compiler.CodeProcessing.CompilationStructuring;
@@ -10,7 +11,7 @@ public static class OpCode
 
     public static IntermediateInstruction LdConst_int(string type, long value) => new(Instruction.LdConst, [type, value.ToString()]);
     public static IntermediateInstruction LdConst_string(string value) => new(Instruction.LdConst, ["str", value]);
-    public static IntermediateInstruction LdConst_float(string type, float value) => new(Instruction.LdConst, [type, value.ToString()]);
+    public static IntermediateInstruction LdConst_float(string type, double value) => new(Instruction.LdConst, [type, value.ToString(CultureInfo.InvariantCulture)]);
     public static IntermediateInstruction LdConst_bool(bool value) => new(Instruction.LdConst, ["bool", value.ToString()]);
 
     public static IntermediateInstruction SetLocal(int id) => new(Instruction.SetLocal, [id.ToString()]);

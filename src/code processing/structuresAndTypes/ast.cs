@@ -273,10 +273,15 @@ public class MethodCallNode : ExpressionNode
 
 public class NumericLiteralNode : ExpressionNode
 {
-
-    public double value = 0.0;
+    public long value = 0;
 
     public override string ToString() => $"{value}";
+}
+public class FloatingLiteralNode : ExpressionNode
+{
+    public double value = 0.0;
+
+    public override string ToString() => $"{value:F4}";
 }
 
 public class StringLiteralNode : ExpressionNode

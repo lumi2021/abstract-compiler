@@ -175,6 +175,8 @@ public static class Lexer
                     string num = "";
                     byte numBase = 10;
 
+                    bool isFloating = false;
+
                     if (c == '0') // verify different bases
                     {
                         if (char.ToLower(sourceCode[i+1]) == 'x')
@@ -193,6 +195,15 @@ public static class Lexer
                     for ( ; sourceCode.Length > j; j++)
                     {
                         char cc = sourceCode[j];
+                        
+                        if (cc == '.')
+                        {
+                            if (numBase != 10 || isFloating) break;
+
+                            isFloating = true;
+                            num += cc;
+                            continue;
+                        }
 
                         if (numBase == 10 && !char.IsDigit(cc)) break;
                         else if (numBase == 16 && !char.IsAsciiHexDigit(cc)) break;
@@ -201,7 +212,7 @@ public static class Lexer
                         num += cc;
                     }
 
-                    tokens.Add(Tokenize(num, TokenType.NumberValue, i, j));
+                        tokens.Add(Tokenize(num, !isFloating? TokenType.IntegerNumberValue : TokenType.FloatingNumberValue, i, j));
 
                     i = j-1;
                     
@@ -354,7 +365,8 @@ public struct Token {
 public enum TokenType {
     Undefined,
 
-    NumberValue,
+    IntegerNumberValue,
+    FloatingNumberValue,
     StringLiteralValue,
     Identifier,
 

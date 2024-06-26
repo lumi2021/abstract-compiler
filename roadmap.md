@@ -7,6 +7,7 @@ The steps of the entire proccess to finish the compiler
 [ ] console program help
 [ ] more compiling options
 [ ] more debugging options
+[ ] plug-ins
 ```
 
 ### lexing
@@ -34,10 +35,11 @@ The steps of the entire proccess to finish the compiler
 ║... ╠══ [ ] looping `while`
 ║... ╠══ [ ] looping `for`
 ║... ╠══ [ ] looping `do .. while`
-║... ╠══ [ ] converting `as` operator
+║... ╠══ [x] converting `as` operator
 ║... ╚══ [ ] breaking loop
 ╠══ [ ] Expressions:
 ║... ╠══ [x] literal numbers
+║... ╠══ [x] literal floatings
 ║... ╠══ [x] literal strings
 ║... ╠══ [x] literal booleans
 ║... ╠══ [ ] literal null
@@ -64,9 +66,11 @@ The steps of the entire proccess to finish the compiler
 ╠══ [x] variable checking
 ╠══ [x] stack size counter
 ╠══ [x] scoped stack size counter
-╠══ [x] if/else scoping
+╠══ [ ] conditional and loops scoping
+╠══ [ ] generic code scoping
 ╠══ [x] typing conversion
 ╠══ [x] ast to abstracted instructions
+╠══ [x] assembly statements
 ╠══ [ ] optimizations
 ║... ╠══ [\] operations in comptime
 ║... ╠══ [ ] dead code reducement

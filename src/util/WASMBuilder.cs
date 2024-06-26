@@ -284,8 +284,8 @@ public class WASMBuilder
                     PrimitiveTypeList.Integer_128 or
                     PrimitiveTypeList.UnsignedInteger_128 => WasmType.i64, // unsuported sizes
 
-                    PrimitiveTypeList.Floating_32 => throw new NotImplementedException(),
-                    PrimitiveTypeList.Floating_64 => throw new NotImplementedException(),
+                    PrimitiveTypeList.Floating_32 => WasmType.f32,
+                    PrimitiveTypeList.Floating_64 => WasmType.f64,
 
 
                     PrimitiveTypeList.Boolean or
@@ -388,6 +388,30 @@ public class WASMBuilder
         public readonly struct Return() : IWasmInstruction
         {
             override public string ToString() => $"return";
+        }
+
+
+        public readonly struct Add() : IWasmInstruction
+        {
+            override public string ToString() => $"i32.add";
+        }
+        public readonly struct Sub() : IWasmInstruction
+        {
+            override public string ToString() => $"i32.sub";
+        }
+        public readonly struct Mul() : IWasmInstruction
+        {
+            override public string ToString() => $"i32.mul";
+        }
+        public readonly struct Div(bool signed) : IWasmInstruction
+        {
+            private readonly bool signed = signed;
+            override public string ToString() => $"i32.div_" + (signed ? "s" : "u");
+        }
+        public readonly struct Rem(bool signed) : IWasmInstruction
+        {
+            private readonly bool signed = signed;
+            override public string ToString() => $"i32.rem_" + (signed ? "s" : "u");
         }
 
 

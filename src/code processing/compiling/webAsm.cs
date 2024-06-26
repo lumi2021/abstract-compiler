@@ -145,6 +145,23 @@ public class WasmCompiler : BaseCompiler
                 vstack.Push(i.parameters[0]);
                 break;
 
+            case Instruction.Add:
+                method.Emit(new OpCode.Add());
+                break;
+            case Instruction.Sub:
+                method.Emit(new OpCode.Sub());
+                break;
+            case Instruction.Mul:
+                method.Emit(new OpCode.Mul());
+                break;
+            case Instruction.Div:
+                method.Emit(new OpCode.Div(true));
+                break;
+            case Instruction.Rest:
+                method.Emit(new OpCode.Rem(true));
+                break;
+
+
             case Instruction.If:
                 method.EmitIf();
                 break;
@@ -165,7 +182,10 @@ public class WasmCompiler : BaseCompiler
     }
 
     private static TypeItem GetMethodLocalData(WASMBuilder.WasmMethod method, int index)
-        => method.src.LocalData[index];
+    {
+        if (index >= 0) return method.src.LocalData[index];
+        else return method.src.parameters[Math.Abs(index) - 1].type;
+    }
     
     private static WASMBuilder.WasmType String2WasmType(string str)
     {

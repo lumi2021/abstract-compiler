@@ -1,7 +1,12 @@
 namespace Std.Console
 {
 
+    func void Write(i64 value)
+    func void Write(f64 value)
+    func void Write(string content)
+
     func void Log(i64 value)
+    func void Log(f64 value)
     func void Log(string content)
     
     func string Read()

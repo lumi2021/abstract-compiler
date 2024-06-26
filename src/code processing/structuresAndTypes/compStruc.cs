@@ -288,8 +288,11 @@ public class TypeItem : CompStruct
 
         if (a.Value is PrimitiveType @prim1 && b.Value is PrimitiveType @prim2)
         {
-            if (@prim1.Kind != PrimitiveTypeKind.IntegerNumeric) return @prim1.Kind == @prim2.Kind;
-            else return @prim1.MinValue >= @prim2.MinValue && @prim1.MaxValue <= @prim2.MaxValue;
+            if (@prim2.Kind == PrimitiveTypeKind.IntegerNumeric)
+                return @prim1.Kind == @prim2.Kind && @prim1.MinValue >= @prim2.MinValue && @prim1.MaxValue <= @prim2.MaxValue;
+
+            else if (@prim2.Kind == PrimitiveTypeKind.FloatingNumeric)
+                return @prim1.Kind == PrimitiveTypeKind.FloatingNumeric || @prim1.Kind == PrimitiveTypeKind.IntegerNumeric;
         }
 
         return false;

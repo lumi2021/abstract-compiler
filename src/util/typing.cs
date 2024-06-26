@@ -110,7 +110,7 @@ public static class Typing
         };
     }
 
-    public static double MinValueOf(PrimitiveTypeList type) => type switch
+    public static long MinValueOf(PrimitiveTypeList type) => type switch
     {
         PrimitiveTypeList.Integer_8    => -(long)Math.Pow(2, 7),
         PrimitiveTypeList.Integer_16   => -(long)Math.Pow(2, 15),
@@ -126,7 +126,7 @@ public static class Typing
 
         _ => 0
     };
-    public static double MaxValueOf(PrimitiveTypeList type) => type switch
+    public static long MaxValueOf(PrimitiveTypeList type) => type switch
     {
         PrimitiveTypeList.Integer_8    => (long)Math.Pow(2, 7) -1,
         PrimitiveTypeList.Integer_16   => (long)Math.Pow(2, 15) -1,
@@ -145,7 +145,7 @@ public static class Typing
 
     public static PrimitiveTypeKind KindOf(PrimitiveTypeList type) => type switch
     {
-        
+        PrimitiveTypeList.__Generic__Number or
         PrimitiveTypeList.Integer_8 or
         PrimitiveTypeList.Integer_16 or
         PrimitiveTypeList.Integer_32 or
@@ -157,7 +157,7 @@ public static class Typing
         PrimitiveTypeList.UnsignedInteger_64 or
         PrimitiveTypeList.UnsignedInteger_128 => PrimitiveTypeKind.IntegerNumeric,
         
-        PrimitiveTypeList.__Generic__Number or
+        PrimitiveTypeList.__Generic__Floating or
         PrimitiveTypeList.Floating_32 or
         PrimitiveTypeList.Floating_64 => PrimitiveTypeKind.FloatingNumeric,
 
@@ -180,8 +180,7 @@ public interface ILangType
     public string ToIlString();
 }
 
-public readonly struct PrimitiveType(PrimitiveTypeList value, TypeDefKind refTo) : ILangType
-{
+public readonly struct PrimitiveType(PrimitiveTypeList value, TypeDefKind refTo) : ILangType{
 
     private readonly PrimitiveTypeList _value = value;
     public PrimitiveTypeList Value => _value;
@@ -191,8 +190,8 @@ public readonly struct PrimitiveType(PrimitiveTypeList value, TypeDefKind refTo)
     public TypeDefKind ReferingTo => _referingTo;
     public int Size => Typing.SizeOf(_value);
 
-    public double MinValue => Typing.MinValueOf(_value);
-    public double MaxValue => Typing.MaxValueOf(_value);
+    public long MinValue => Typing.MinValueOf(_value);
+    public long MaxValue => Typing.MaxValueOf(_value);
 
     public PrimitiveTypeKind Kind => Typing.KindOf(_value);
 
@@ -256,7 +255,8 @@ public enum PrimitiveTypeList : byte
 
 
     // generic
-    __Generic__Number
+    __Generic__Number,
+    __Generic__Floating,
 
 }
 
