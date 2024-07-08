@@ -1,3 +1,5 @@
+using Compiler.Util.Compilation;
+
 namespace Compiler;
 
 public static class Extensions

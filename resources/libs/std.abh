@@ -1,27 +1,67 @@
+###
+
+    STANDARD LIBRARY HEADER SCRIPT
+
+    here, only the method declarations need to be done
+    the final implementation is done by the final compilation
+    where the compiler will handle the method calls at the
+    best way to the targeting platform.
+
+###
 namespace Std.Console
 {
 
+    func void Write(i8 value)
+    func void Write(i16 value)
+    func void Write(i32 value)
     func void Write(i64 value)
+
+    func void Write(u8 value)
+    func void Write(u16 value)
+    func void Write(u32 value)
+    func void Write(u64 value)
+
+    func void Write(f32 value)
     func void Write(f64 value)
+    
     func void Write(string content)
 
+    func void Log(i8 value)
+    func void Log(i16 value)
+    func void Log(i32 value)
     func void Log(i64 value)
+
+    func void Log(u8 value)
+    func void Log(u16 value)
+    func void Log(u32 value)
+    func void Log(u64 value)
+
+    func void Log(f32 value)
     func void Log(f64 value)
+
     func void Log(string content)
     
     func string Read()
 
 }
 
-namespace Std.Type
+namespace Std.Type.String
 {
+    func bool Equals(string a, string b)
+}
+
+namespace Std.Type.Casting
+{
+    func i8 Cast_i8(string value)
+    func i16 Cast_i16(string value)
     func i32 Cast_i32(string value)
+    func i64 Cast_i64(string value)
 }
 
 namespace Std.Memory
 {
 
     func i64 GenArray(i32 len)
-    func i64 LoadString(string source)
+    func string LoadString(string source)
     
 }

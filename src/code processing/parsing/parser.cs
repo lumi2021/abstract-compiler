@@ -260,12 +260,12 @@ public static class Parser
 
     private static ExpressionNode ParseAssiginmentExpression()
     {
-        var left = ParseAdditiveExpression();
+        var left = ParseBooleanExpression();
 
         while (Current().type == TokenType.EqualsChar)
         {
             Eat();
-            var value = ParseExpression();
+            var value = ParseBooleanExpression();
             left = new AssiginmentExpressionNode()
             {
                 assigne = left,
@@ -276,11 +276,28 @@ public static class Parser
         return left;
     }
 
+    private static ExpressionNode ParseBooleanExpression()
+    {
+        var left = ParseAdditiveExpression();
+
+        while (Current().type == TokenType.EqualOperator || Current().type == TokenType.UnEqualOperator)
+        {
+            left = new BinaryExpressionNode()
+            {
+                expOperator = Eat().value,
+                leftStatement = left,
+                rightStatement = ParseAdditiveExpression()
+            };
+        }
+
+        return left;
+    }
+
     private static ExpressionNode ParseAdditiveExpression()
     {
         var left = ParseMultiplicativeExpression();
 
-        while (Current().value == "+" || Current().value == "-")
+        while (Current().type == TokenType.CrossChar || Current().type == TokenType.MinusChar)
         {
             var op = Eat().value;
             var right = ParseMultiplicativeExpression();
@@ -300,7 +317,9 @@ public static class Parser
     {
         var left = ParseUnaryExpression();
 
-        while (Current().value == "*" || Current().value == "/" || Current().value == "%")
+        while (Current().type == TokenType.StarChar
+        || Current().type == TokenType.SlashChar
+        || Current().type == TokenType.PercentChar)
         {
             var op = Eat().value;
             var right = ParseUnaryExpression();
@@ -318,9 +337,8 @@ public static class Parser
 
     private static ExpressionNode ParseUnaryExpression()
     {
-        var v = Current().value;
 
-        if (v == "-" || v == "+")
+        if (Current().type == TokenType.MinusChar || Current().type == TokenType.AddAssigin)
         {
 
             return new UnaryExpressionNode()
@@ -330,15 +348,12 @@ public static class Parser
             };
 
         }
-        else if ("*/%".Contains(v))
-            Expect(TokenType.MinusChar, $"Invalid unary operator {v}!");
-
         else if (Current().type == TokenType.ComercialEChar)
         {
             return new ReferenceModifier()
             {
                 modifier = Eat(),
-                expression = ParseUnaryExpression()
+                expression = ParseExpression()
             };
         }
 

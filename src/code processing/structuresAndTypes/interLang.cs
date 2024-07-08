@@ -19,15 +19,18 @@ public static class OpCode
     public static IntermediateInstruction GetLocal(int id) => new(Instruction.GetLocal, [id.ToString()]);
     public static IntermediateInstruction GetLocal(LocalRef lr) => new(Instruction.GetLocal, [lr.index.ToString()]);
 
-    public static IntermediateInstruction Add() => new(Instruction.Add, []);
-    public static IntermediateInstruction Sub() => new(Instruction.Sub, []);
-    public static IntermediateInstruction Mul() => new(Instruction.Mul, []);
-    public static IntermediateInstruction Div() => new(Instruction.Div, []);
-    public static IntermediateInstruction Rest() => new(Instruction.Rest, []);
+    public static IntermediateInstruction Add(string type) => new(Instruction.Add, [type]);
+    public static IntermediateInstruction Sub(string type) => new(Instruction.Sub, [type]);
+    public static IntermediateInstruction Mul(string type) => new(Instruction.Mul, [type]);
+    public static IntermediateInstruction Div(string type) => new(Instruction.Div, [type]);
+    public static IntermediateInstruction Rem(string type) => new(Instruction.Rem, [type]);
+
+    public static IntermediateInstruction Equals() => new(Instruction.Equals, []);
+    public static IntermediateInstruction Unequals() => new(Instruction.Unequals, []);
 
     public static IntermediateInstruction Conv(string type) => new(Instruction.Conv, [type]);
 
-    public static IntermediateInstruction CallStatic(MethodItem method) => new(Instruction.CallStatic, [method.returnType.ToAsmString(), method.GetGlobalReferenceIL()]);
+    public static IntermediateInstruction CallStatic(MethodItem method) => new(Instruction.CallStatic, [method.returnType.ToAsmString(), method.GetGlobalReference()]);
 
     public static IntermediateInstruction Ret() => new(Instruction.Ret, []);
 
@@ -61,11 +64,14 @@ public readonly struct IntermediateInstruction(Instruction instruction, string[]
 
             Instruction.LdConst         => parameters[0] != "str" ? "ldConst.{0}" : "ldConst.{0} \"{1}\"",
 
-            Instruction.Add             => "add",
-            Instruction.Sub             => "sub",
-            Instruction.Mul             => "mul",
-            Instruction.Div             => "div",
-            Instruction.Rest            => "rest",
+            Instruction.Add             => "add.{0}",
+            Instruction.Sub             => "sub.{0}",
+            Instruction.Mul             => "mul.{0}",
+            Instruction.Div             => "div.{0}",
+            Instruction.Rem             => "rem.{0}",
+
+            Instruction.Equals          => "equals",
+            Instruction.Unequals        => "unequals",
 
             Instruction.Conv            => "conv.{0}",
 
@@ -115,7 +121,10 @@ public enum Instruction : byte
     Sub,
     Mul,
     Div,
-    Rest,
+    Rem,
+
+    Equals,
+    Unequals,
 
     Conv,
 

@@ -54,9 +54,9 @@ public class WasmCompiler : BaseCompiler
                 if (ns.ScriptSourceReference is not HeaderScript)
                 {
 
-                    var method = module.CreateMethod(mt.GetGlobalReferenceAsm(), mt.returnType, mt);
+                    var method = module.CreateMethod(mt.GetGlobalReference(), mt.returnType, mt);
 
-                    foreach (var i in mt.parameters) method.AddParameter(i.identifier.ToString(), i.type);
+                    foreach (var i in mt.Parameters) method.AddParameter(i.identifier.ToString(), i.type);
                     foreach (var i in mt.LocalData) method.AddLocal(i);
 
                     foreach (var i in mt.interLang) CompileIl(i, method);
@@ -64,8 +64,8 @@ public class WasmCompiler : BaseCompiler
                 }
                 else
                 {
-                    var import = module.CreateImport(mt.GetGlobalReferenceAsm(), mt.returnType, mt.GetGlobalReferenceAsm().Split('.'));
-                    foreach (var i in mt.parameters) import.function.AddParameter(i.identifier.ToString(), i.type);
+                    var import = module.CreateImport(mt.GetGlobalReference(), mt.returnType, mt.GetGlobalReference().Split('.'));
+                    foreach (var i in mt.Parameters) import.function.AddParameter(i.identifier.ToString(), i.type);
                 }
             }
         }
@@ -79,7 +79,13 @@ public class WasmCompiler : BaseCompiler
         {
             case Instruction.GetLocal:
                 vstack.Push(GetMethodLocalData(method, int.Parse(i.parameters[0])).ToAsmString());
-                method.Emit(new OpCode.Local(OpCode.LocalMode.get, int.Parse(i.parameters[0]) + method.ParametersLength));
+                int localIdx = 0;
+                int ilLocal = int.Parse(i.parameters[0]);
+
+                if (ilLocal >= 0) localIdx = ilLocal + method.ParametersLength;
+                else localIdx = Math.Abs(ilLocal) - 1;
+
+                method.Emit(new OpCode.Local(OpCode.LocalMode.get, localIdx));
                 break;
 
             case Instruction.SetLocal:
@@ -125,7 +131,7 @@ public class WasmCompiler : BaseCompiler
                 var tConv = vstack.Pop();
 
                 if (tConv == "str" || i.parameters[0] == "str")
-                    method.Emit(new OpCode.Call($"Std.Type.Cast_{i.parameters[0]}?{tConv}"));
+                    method.Emit(new OpCode.Call($"Std.Type.Casting.Cast_{i.parameters[0]}?{tConv}"));
                 
                 else
                 {
@@ -146,23 +152,48 @@ public class WasmCompiler : BaseCompiler
                 break;
 
             case Instruction.Add:
+                vstack.Pop(2);
                 method.Emit(new OpCode.Add());
+                vstack.Push("i32");
                 break;
             case Instruction.Sub:
+                vstack.Pop(2);
                 method.Emit(new OpCode.Sub());
+                vstack.Push("i32");
                 break;
             case Instruction.Mul:
+                vstack.Pop(2);
                 method.Emit(new OpCode.Mul());
+                vstack.Push("i32");
                 break;
             case Instruction.Div:
+                vstack.Pop(2);
                 method.Emit(new OpCode.Div(true));
+                vstack.Push("i32");
                 break;
-            case Instruction.Rest:
+            case Instruction.Rem:
+                vstack.Pop(2);
                 method.Emit(new OpCode.Rem(true));
+                vstack.Push("i32");
                 break;
 
+            case Instruction.Equals:
+
+                var t1 = vstack.Pop();
+                var t2 = vstack.Pop();
+
+                if (t1 == t2)
+                {
+                    if (t1 == "str") // String equality
+                        method.Emit(new OpCode.Call("Std.Type.String.Equals?str_str"));
+                }
+
+                vstack.Push("i32");
+
+                break;
 
             case Instruction.If:
+                vstack.Pop();
                 method.EmitIf();
                 break;
 
@@ -184,7 +215,7 @@ public class WasmCompiler : BaseCompiler
     private static TypeItem GetMethodLocalData(WASMBuilder.WasmMethod method, int index)
     {
         if (index >= 0) return method.src.LocalData[index];
-        else return method.src.parameters[Math.Abs(index) - 1].type;
+        else return method.src.Parameters[Math.Abs(index) - 1].type;
     }
     
     private static WASMBuilder.WasmType String2WasmType(string str)

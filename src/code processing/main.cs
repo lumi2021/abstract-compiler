@@ -23,7 +23,7 @@ public static class CodeProcess
 
         OutputDirectory = outputDir;
 
-        List<HeaderScript> includedLibs = [ new("./resources/libs/std.abh", "./resources/libs/stdx32.asm")];
+        List<HeaderScript> includedLibs = [ new("./resources/libs/std.abh", "./resources/libs/nasm/stdx32.asm")];
         List<Script> toCompile =  [.. includedLibs];
 
         // TODO Append libraries
@@ -67,7 +67,8 @@ public static class CodeProcess
 
         if (!ErrorHandler.CompilationFailed)
         {
-            BaseCompiler compiler = new WasmCompiler(); // compiling to Wasm
+            BaseCompiler compiler = new NasmCompiler(); // compiling to Nasm
+            //                      new WasmCompiler(); // compiling to Wasm
             compiler.Compile(evaluated, outputDir, outputFile);
         }
 

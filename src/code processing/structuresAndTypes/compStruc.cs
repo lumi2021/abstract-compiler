@@ -8,9 +8,8 @@ namespace Compiler.CodeProcessing.CompilationStructuring;
 
 public interface IReferenceable
 {
-    public Identifier GetGlobalReference();
-    public string GetGlobalReferenceAsm();
-    public string GetGlobalReferenceIL();
+    public string[] GetGlobalPath();
+    public string GetGlobalReference();
 }
 public abstract class CompStruct(StatementNode referTo, CompStruct? parent = null)
 {
@@ -24,7 +23,11 @@ public abstract class CompStruct(StatementNode referTo, CompStruct? parent = nul
 public class CompilationRoot(StatementNode referTo) : CompStruct(referTo)
 {
 
+    public List<Script> scripts = [];
     public List<NamespaceItem> namespaces = [];
+
+    public NamespaceItem? FindNamespace(string identfier)
+        => namespaces.Find(e => e.GetGlobalReference() == identfier);
 
     public override string ToString()
     {
@@ -45,46 +48,57 @@ public class CompilationRoot(StatementNode referTo) : CompStruct(referTo)
         foreach (var ns in namespaces)
         {
             if (ns is ExplicitNamespaceItem @exp)
-                sb.AppendLine($"namespace {@exp.name}:");
-            else
-                sb.AppendLine($"namespace (implicit):");
+                sb.Append($"namespace {@exp.name}");
+            else sb.Append($"namespace (implicit)");
             
-            sb.Append("\tMETA: ");
+            sb.Append(" [META: ");
             sb.Append($"{ns.methods.Count} methods; ");
-            sb.Append($"{ns.globalFields.Count} g. fields;\n");
+            sb.Append($"{ns.globalFields.Count} g. fields;");
+            sb.AppendLine("]:");
 
             foreach (var m in ns.methods)
             {
-                sb.Append($"\tfunc {m.returnType} {m.name}(");
+                if (m.ScriptRef is HeaderScript)
+                    sb.Append("\tHEADER ");
+                else sb.Append('\t');
 
-                foreach (var mp in m.parameters)
+                sb.Append($"func {m.returnType} {m.name}(");
+
+                foreach (var mp in m.Parameters)
                 {
                     if (mp.type is TypeItem @type)
                         sb.Append($"{@type.Value} {mp.identifier}, ");
                 }
 
-                if (m.parameters.Count > 0) sb.Remove(sb.Length - 2, 2);
+                if (m.Parameters.Count > 0) sb.Remove(sb.Length - 2, 2);
 
-                sb.AppendLine(") {");
+                sb.Append(')');
 
-                sb.Append("\t\tMETA: ");
-                sb.Append($"stack size: {m.LocalMemorySize}B;");
-                sb.AppendLine();
-
-                if (!m.compiled)
+                if (m.ScriptRef is not HeaderScript)
                 {
-                    foreach (var i in m.codeStatements)
-                        sb.AppendLine($"\t\t{i}");
-                }
-                else
-                {
-                    foreach (var i in m.interLang)
+                    sb.Append(" [META: ");
+                    sb.Append($"stack size: {m.LocalMemorySize}B;");
+                    sb.AppendLine("]\n\t{");
+
+                    if (!m.compiled)
                     {
-                        sb.AppendLine($"\t\t{i}");
+                        foreach (var i in m.codeStatements)
+                        {
+                            string[] lines = i.ToString()!.Split('\n');
+                            foreach(var l in lines) sb.AppendLine($"\t\t{l}");
+                        }
                     }
-                }
+                    else
+                    {
+                        foreach (var i in m.interLang)
+                        {
+                            sb.AppendLine($"\t\t{i}");
+                        }
+                    }
 
-                sb.AppendLine("\t}");
+                    sb.AppendLine("\t}");
+                }
+                else sb.Append('\n');
             }
 
             sb.AppendLine();
@@ -109,9 +123,8 @@ public abstract class NamespaceItem(StatementNode referTo, CompilationRoot paren
         set => _parent = value;
     }
 
-    public virtual Identifier GetGlobalReference() =>  new(null!, [$"{GetHashCode()}"]);
-    public string GetGlobalReferenceAsm() => string.Join('.', GetGlobalReference());
-    public string GetGlobalReferenceIL() => string.Join('.', GetGlobalReference());
+    public virtual string[] GetGlobalPath() => [$"{GetHashCode()}"];
+    public virtual string GetGlobalReference() => $"{GetHashCode()}";
 }
 
 public class ImplicitNamespaceItem(Script source, StatementNode referTo, CompilationRoot parent) : NamespaceItem(referTo, parent, source) {}
@@ -119,7 +132,8 @@ public class ExplicitNamespaceItem(Script source, StatementNode referTo, Compila
 {
     public Identifier name = new();
 
-    public override Identifier GetGlobalReference() => new(null!, [.. name.values]);
+    public override string[] GetGlobalPath() => [.. name.values];
+    public override string GetGlobalReference() => string.Join('.', name.values);
 }
 
 
@@ -143,7 +157,6 @@ public class MethodItem(StatementNode referTo, NamespaceItem parent) : CompStruc
 
     public TypeItem returnType = null!;
     public Identifier name = new();
-    public List<ParameterItem> parameters = [];
     
     public List<StatementNode> codeStatements = [];
     public List<IntermediateInstruction> interLang = [];
@@ -151,6 +164,9 @@ public class MethodItem(StatementNode referTo, NamespaceItem parent) : CompStruc
 
     public uint LocalMemorySize => (uint)LocalData.Select(a => a.Value.Size).Sum();
     public List<TypeItem> LocalData { get; set;} = [];
+
+    public uint ParametersMemorySize => (uint)Parameters.Select(a => a.type.Value.Size).Sum();
+    public List<ParameterItem> Parameters {get; set; } = [];
 
     public Script ScriptRef => Parent.ScriptSourceReference;
 
@@ -190,43 +206,30 @@ public class MethodItem(StatementNode referTo, NamespaceItem parent) : CompStruc
         set => _parent = value;
     }
 
-    public Identifier GetGlobalReference()
+    public string[] GetGlobalPath()
     {
+        List<string> nameSpace = [];
         List<string> path = [];
-        if (Parent != null) path.AddRange(Parent.GetGlobalReference().values);
-        path.AddRange(name.values);
-
-        return new(returnType, [.. path]);
-    }
-    
-    public string GetGlobalReferenceAsm()
-    {
-        List<string> path = [];
-        List<string> paramStrs = [];
 
         if (Parent != null)
-            path.AddRange(Parent.GetGlobalReference().values);
+            nameSpace.AddRange(Parent.GetGlobalPath());
 
         path.AddRange(name.values);
 
-        foreach (var i in parameters)
-            paramStrs.Add(i.type.ToAsmString());
-
-        return string.Join(".", path) + '?' + string.Join('_', paramStrs);
+        return [..nameSpace, ..path];
     }
-
-    public string GetGlobalReferenceIL()
+    public string GetGlobalReference()
     {
         List<string> nameSpace = [];
         List<string> path = [];
         List<string> paramStrs = [];
 
         if (Parent != null)
-            nameSpace.AddRange(Parent.GetGlobalReference().values);
+            nameSpace.AddRange(Parent.GetGlobalPath());
 
         path.AddRange(name.values);
 
-        foreach (var i in parameters)
+        foreach (var i in Parameters)
             paramStrs.Add(i.type.ToAsmString());
 
         return string.Join(".", nameSpace) + ':' + string.Join(".", path) + '?' + string.Join('_', paramStrs);

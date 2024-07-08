@@ -33,6 +33,9 @@ public static class Evaluation
 
                     compilation.namespaces.Add(nnamespace);
                     allNamespaces.Add(nnamespace);
+
+                    if (!compilation.scripts.Contains(script.SourceReference))
+                        compilation.scripts.Add(script.SourceReference);
                 }
                 else Console.WriteLine("Node type " + i.GetType().Name + " found outside of a namespace!");
             }
@@ -64,7 +67,7 @@ public static class Evaluation
                         if (p.type is PrimitiveTypeNode @primitive)
                             parameter.type = new TypeItem(@primitive);
 
-                        methodItem.parameters.Add(parameter);
+                        methodItem.Parameters.Add(parameter);
                     }
 
                     foreach (var stat in @method.methodScope)
@@ -90,15 +93,20 @@ public static class Evaluation
             List<LocalVar> localVariables = [];
             int localIndex = 0;
 
-            for (var i = 0; i < mt.parameters.Count; i++)
+            for (var i = 0; i < mt.Parameters.Count; i++)
             {
-                var mParam = mt.parameters[i];
+                var mParam = mt.Parameters[i];
                 localVariables.Add(new(mParam.identifier, -(i+1), mParam.type));
             }
 
             foreach (var l in mt.codeStatements.ToArray())
             {
-                EvaluateStatementIdentifiers(l, mt, localVariables, ref localIndex);                
+                try {
+                    EvaluateStatementIdentifiers(l, mt, localVariables, ref localIndex);
+                }
+                catch (BuildException ex) {
+                    mt.ScriptRef.ThrowError(ex);
+                }
             }
 
         }
@@ -195,7 +203,7 @@ public static class Evaluation
                             var arg = @call.arguments[i];
 
                             var t1 = EvaluateExpressionType(arg);
-                            var t2 = (@call.target.refersTo as MethodItem)!.parameters[i].type;
+                            var t2 = (@call.target.refersTo as MethodItem)!.Parameters[i].type;
 
                             if (t1 != t2)
                             {
@@ -260,14 +268,14 @@ public static class Evaluation
             foreach (var i in overloads)
             {
                 bool allSame = true;
-                if (i.parameters.Count == method.parameters.Count)
+                if (i.Parameters.Count == method.Parameters.Count)
                 {
 
-                    for (var j = 0; j < i.parameters.Count; j++)
+                    for (var j = 0; j < i.Parameters.Count; j++)
                     {
 
-                        var p1 = i.parameters[j]; 
-                        var p2 = method.parameters[j]; 
+                        var p1 = i.Parameters[j]; 
+                        var p2 = method.Parameters[j]; 
 
                         if (p1.type != p2.type)
                         {
@@ -478,14 +486,7 @@ public static class Evaluation
                 @ident.symbol.refersToType = decVars[idx].type;
 
             }
-            else 
-            {
-                var ridx = Math.Abs(idx) - 1;
-                @ident.isLocal = true;
-                @ident.localRef = new(mt!.parameters[ridx].type, idx);
-                @ident.symbol.refersToType = mt!.parameters[ridx].type;
-            }
-
+            else throw new LocalVariableNotFoundException();
         }
 
         else if (exp is MethodCallNode @methodCall)
@@ -495,9 +496,7 @@ public static class Evaluation
 
                 // process arguments
                 for (var i = 0; i < @methodCall.arguments.Count; i++)
-                {
                     EvaluateExpressionIdentifiers(@methodCall.arguments[i], mt, ns, decVars);
-                }
                 
                 // evaluate arguments types
                 Identifier methodName = @methodCall.target;
@@ -505,27 +504,45 @@ public static class Evaluation
 
                 if (overloads.Length == 0) throw new MethodNotFoundException();
 
+                // find overload
                 MethodItem method = null!;
                 foreach (var mtd in overloads)
                 {
-                    if (@methodCall.arguments.Count != mtd.parameters.Count) continue;
+                    if (@methodCall.arguments.Count != mtd.Parameters.Count) continue;
 
                     // just to make sure hehe
-                    if (@methodCall.arguments.Count == 0 && mtd.parameters.Count == 0)
+                    if (@methodCall.arguments.Count == 0 && mtd.Parameters.Count == 0)
                     {
                         method = mtd;
                         break;
                     }
 
-                    for (var i = 0; i < mtd.parameters.Count; i++)
+                    for (var i = 0; i < mtd.Parameters.Count; i++)
                     {
 
-                        var pType = mtd.parameters[i].type;
+                        var pType = mtd.Parameters[i].type;
                         var aType = EvaluateExpressionType(@methodCall.arguments[i]);
 
-                        if (pType == aType ||
-                        (IsNumericIntegerType(pType.Value) && IsNumericIntegerType(aType.Value)) ||
-                        (IsNumericFloatingType(pType.Value) && IsNumericFloatingType(aType.Value)))
+                        if (pType == aType)
+                        {
+                            method = mtd;
+                            break;
+                        }
+                    }
+                }
+
+                if (method == null)
+                foreach (var mtd in overloads)
+                {
+                    if (@methodCall.arguments.Count != mtd.Parameters.Count) continue;
+
+                    for (var i = 0; i < mtd.Parameters.Count; i++)
+                    {
+
+                        var pType = mtd.Parameters[i].type;
+                        var aType = EvaluateExpressionType(@methodCall.arguments[i]);
+
+                        if (aType.IsAssignableTo(pType))
                         {
                             method = mtd;
                             break;
@@ -537,8 +554,9 @@ public static class Evaluation
 
                 if (method != null)
                 {
-                    @methodCall.target = method.GetGlobalReference();
-                    @methodCall.target.refersTo = method;
+                    @methodCall.target = new(method.returnType, method.GetGlobalPath()) {
+                        refersTo = method
+                    };
 
                     foreach (var arg in @methodCall.arguments)
                     {
@@ -578,7 +596,7 @@ public static class Evaluation
 
     private static TypeItem EvaluateExpressionType(ExpressionNode exp)
     {
-        //Console.WriteLine($"{exp} ({exp.GetType().Name})");
+        Console.WriteLine($"{exp} ({exp.GetType().Name})");
 
         if (exp is MethodCallNode @call)
             return @call.target.refersToType;
@@ -597,10 +615,25 @@ public static class Evaluation
             var b = EvaluateExpressionType(@binary.rightStatement);
 
             if (a == b) return a;
-            else Console.WriteLine($"a is {a} and b is {b}");
+            else
+            {
+                if (a.Value is PrimitiveType @p1 && b.Value is PrimitiveType @p2)
+                {
+                    return GetMinimumCommomType(p1, p2);
+                }
+            }
         }
 
         throw new NotImplementedException($"{exp.GetType().Name} is still not supported.");
+    }
+    private static TypeItem GetMinimumCommomType(PrimitiveType t1, PrimitiveType t2)
+    {
+        if (t1.Value == t2.Value) return new(t1.Value);
+
+        if (t1.MaxValue > t2.MaxValue && t1.MinValue < t2.MinValue) return new(t1.Value);
+        if (t2.MaxValue > t1.MaxValue && t2.MinValue < t1.MinValue) return new(t2.Value);
+
+        return new(PrimitiveTypeList.Void);
     }
 
     private static bool IsNumericIntegerType(ILangType t)
@@ -729,16 +762,32 @@ public static class Evaluation
 
         if (exp is BinaryExpressionNode @binaryExp)
         {
-            rist.AddRange(ExpressionToAsm(@binaryExp.rightStatement));
-            rist.AddRange(ExpressionToAsm(@binaryExp.leftStatement));
+            var left = @binaryExp.leftStatement;
+            var right = @binaryExp.rightStatement;
+
+            var t1 = EvaluateExpressionType(left);
+            var t2 = EvaluateExpressionType(right);
+            var p1 = (PrimitiveType)t1.Value;
+            var p2 = (PrimitiveType)t2.Value;
+
+            var commonType = GetMinimumCommomType(p1, p2);
+
+            rist.AddRange(ExpressionToAsm(right));
+            if (t1 != commonType) rist.Add(OpCode.Conv(commonType.ToAsmString()));
+            
+            rist.AddRange(ExpressionToAsm(left));
+            if (t2 != commonType) rist.Add(OpCode.Conv(commonType.ToAsmString()));
             
             rist.Add(@binaryExp.expOperator switch
             {
-                "+" => OpCode.Add(),
-                "-" => OpCode.Sub(),
-                "*" => OpCode.Mul(),
-                "/" => OpCode.Div(),
-                "%" => OpCode.Rest(),
+                "+" => OpCode.Add(commonType.ToAsmString()),
+                "-" => OpCode.Sub(commonType.ToAsmString()),
+                "*" => OpCode.Mul(commonType.ToAsmString()),
+                "/" => OpCode.Div(commonType.ToAsmString()),
+                "%" => OpCode.Rem(commonType.ToAsmString()),
+
+                "==" => OpCode.Equals(),
+                "!=" => OpCode.Unequals(),
 
                 _   => throw new NotSupportedException($"operator {@binaryExp.expOperator}")
             });
@@ -754,17 +803,17 @@ public static class Evaluation
 
         else if (exp is NumericLiteralNode @numericLit)
         {
-            string IlTypeString = "i64";
+            string IlTypeString = expectedType?.Value.ToIlString() ?? "int";
 
             if (expectedType is not null and TypeItem @pt)
                 IlTypeString = @pt.Value.ToIlString();
             
-            rist.Add(OpCode.LdConst_int(IlTypeString, (long)@numericLit.value));
+            rist.Add(OpCode.LdConst_int(IlTypeString, @numericLit.value));
         }
 
         else if (exp is FloatingLiteralNode @floatLit)
         {
-            string IlTypeString = "f64";
+            string IlTypeString = expectedType?.Value.ToIlString() ?? "f64";
 
             if (expectedType is not null and TypeItem @pt)
                 IlTypeString = @pt.Value.ToIlString();
@@ -788,7 +837,7 @@ public static class Evaluation
             TypeItem assiginType = null!;
 
             // process the assigne first and get the type
-            if (@assigin.assigne is IdentifierNode @targetId)
+            if (assigin.assigne is IdentifierNode @targetId)
             {
                 if (@targetId.isLocal)
                 {
@@ -797,8 +846,10 @@ public static class Evaluation
                 }
             }
 
+            Console.WriteLine(assiginType);
+
             // load the value on stack
-            rist.AddRange(ExpressionToAsm(@assigin.value, assiginType));
+            rist.AddRange(ExpressionToAsm(assigin.value, assiginType));
 
             // set it into assigne
             rist.AddRange(assigneCode);
@@ -815,9 +866,14 @@ public static class Evaluation
 
         else if (exp is TypeCastingExpressionNode @tCast)
         {
-            rist.AddRange(ExpressionToAsm(@tCast.expression));
-            string IlTypeString = new TypeItem(@tCast.type).Value.ToIlString();
-            rist.Add(OpCode.Conv(IlTypeString));
+            var typeToConvert = new TypeItem(@tCast.type);
+
+            rist.AddRange(ExpressionToAsm(@tCast.expression, typeToConvert));
+            if (expectedType! != typeToConvert)
+            {
+                string IlTypeString = new TypeItem(@tCast.type).Value.ToIlString();
+                rist.Add(OpCode.Conv(IlTypeString));
+            }
         }
 
         else throw new NotImplementedException(exp.GetType().Name);

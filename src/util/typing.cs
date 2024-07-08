@@ -79,9 +79,10 @@ public static class Typing
             PrimitiveTypeList.UnsignedInteger_128 or
             PrimitiveTypeList.Integer_128 => 0, // 16
             
-            PrimitiveTypeList.Void or
             PrimitiveTypeList.Pointer or
-            PrimitiveTypeList.String => 0,
+            PrimitiveTypeList.String => 4, // FIXME it should be dynamic
+
+            PrimitiveTypeList.Void => 0,
 
             _ => throw new NotImplementedException()
         };
