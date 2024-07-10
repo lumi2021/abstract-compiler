@@ -62,6 +62,7 @@ namespace Std.Memory
 {
 
     func i64 GenArray(i32 len)
+    func string GenString(i32 len)
     func string LoadString(string source)
     
 }

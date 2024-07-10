@@ -50,6 +50,8 @@ public class NASMBuilder
         return label;
     }
 
+    public uint GetNextInstructionIndex() => (uint)_methods[^1].Instructions.LongLength;
+
     public string EmitAssemblyCode()
     {
         StringBuilder builder = new();
@@ -111,11 +113,8 @@ public class NASMBuilder
     public class AsmJumpBridge
     {
         private uint _target = 0;
+        public void SetBridge(uint target) => _target = target;
         public override string ToString() => $".L{_target:X4}";
-    }
-    public struct JmpBridgeHandler(AsmJumpBridge targ)
-    {
-        public AsmJumpBridge _targ = targ;
     }
 
     public class AsmMethod(string label)
@@ -213,6 +212,8 @@ public class NASMBuilder
         public static IAsmInstruction Sub(Register reg, long value)          => new Op_Sub_Reg_Const(reg, value);
 
         public static IAsmInstruction Hardcoded(string content)              => new Op_Hardcoded(content);
+        public static IAsmInstruction HardcodedJmp
+        (string opCode, AsmJumpBridge bridge)                                => new Op_HardcodedJmp(opCode, bridge);
 
         public static IAsmInstruction Unknown(string text)                   => new Op_Unknown(text);
 
@@ -238,9 +239,9 @@ public class NASMBuilder
             public string ToAsmStruction() => "CALL";
             public string ToAsmParameter() => _target;
         }
-        private readonly struct Op_Jmp(JmpBridgeHandler instruction) : IAsmInstruction
+        private readonly struct Op_Jmp(AsmJumpBridge bridge) : IAsmInstruction
         {
-            private readonly AsmJumpBridge _to = instruction._targ;
+            private readonly AsmJumpBridge _to = bridge;
 
             public string ToAsmStruction() => "JMP";
             public string ToAsmParameter() => $"{_to}";
@@ -347,6 +348,14 @@ public class NASMBuilder
 
             public string ToAsmStruction() => _value[.. Math.Max(_value.IndexOf(' '), 0)].ToUpper();
             public string ToAsmParameter() => _value[Math.Max(_value.IndexOf(' '), 0) ..];
+        }
+        private readonly struct Op_HardcodedJmp(string opcode, AsmJumpBridge bridge) : IAsmInstruction
+        {
+            private readonly string _opcode = opcode;
+            private readonly AsmJumpBridge _bridge = bridge;
+
+            public string ToAsmStruction() => _opcode.ToUpper();
+            public string ToAsmParameter() => $"{_bridge}";
         }
 
         private readonly struct Op_Unknown(string text) : IAsmInstruction

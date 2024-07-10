@@ -60,6 +60,7 @@ public class NasmCompiler : BaseCompiler
         Dictionary<string, int> sections = [];
         Dictionary<string, int> code_labels = [];
         Dictionary<string, string> data_labels = [];
+        Dictionary<string, NASMBuilder.AsmJumpBridge> jump_bridges = [];
 
         for (var i = 0; i < assembly.Length; i++)
         {
@@ -97,17 +98,59 @@ public class NasmCompiler : BaseCompiler
             {
                 if (assembly[i].StartsWith("section")) break;
 
-                var line = assembly[i];
+                var line = assembly[i].Split(';')[0].Trim();
+                if (line.Length == 0) continue;
 
                 if (line.Contains('?') && line.EndsWith(':'))
+                {
+                    jump_bridges.Clear();
                     builder.DelcarateMethodLabel(line[..^1]);
+                }
+                
+                else if (line.EndsWith(':'))
+                {
+                    var label = line[..^1];
+
+                    if (label == ".err")
+                    {}
+
+                    NASMBuilder.AsmJumpBridge bridge = null!;
+                    if (!jump_bridges.TryGetValue(label, out bridge!))
+                    {
+                        bridge = new();
+                        jump_bridges.Add(label, bridge);
+                    }
+                    bridge.SetBridge(builder.GetNextInstructionIndex());
+                }
                 
                 else
                 {
                     foreach (var j in data_labels)
                         line = line.Replace(j.Key, j.Value);
 
-                    builder.Emit(OpCodes.Hardcoded(line));
+                    var tokens = line.Split(' ', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).ToArray();
+
+                    if (((string[])
+                    [
+                        "JMP", "JE", "JZ", "JNE", "JNZ",
+                        "JG", "JNLE", "JGE", "JNL", "JL",
+                        "JNGE", "JLE", "JNG"
+                    ]
+                    ).Contains(tokens[0].ToUpper()) && tokens.Length == 2 && tokens[1].StartsWith('.'))
+                    {
+                        // is a jump instruction. jumps should be handled in a different way
+                        
+                        NASMBuilder.AsmJumpBridge bridge = null!;
+                        if (!jump_bridges.TryGetValue(tokens[1], out bridge!))
+                        {
+                            bridge = new();
+                            jump_bridges.Add(tokens[1], bridge);
+                        }
+
+                        builder.Emit(OpCodes.HardcodedJmp(tokens[0], bridge));
+                    }
+
+                    else builder.Emit(OpCodes.Hardcoded(line));
                 }
             }
         }
