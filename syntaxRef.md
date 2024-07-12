@@ -1,7 +1,7 @@
 # Abstract Syntax Reference
 
 This document contains the basic syntax of the Abstract language.
-This document is used as an guide and chan be changed with the time.
+This document is used as an guide and can be changed with the time.
 
 # General reference
 ```
@@ -23,20 +23,21 @@ using Std
 namespace MyProgram {
 # This is my program :) #
 
-    func Start() { # 'func' is, as default, defined as PRIVATE
+    # functions are, as default, defined as PRIVATE
+    func void Main() {
 
         let u8 foo = 10
         let i32 bar = 30
 
-        Std.Console.Out("Hello, World!\n")
-        Console.Out("Foo is %d and bar is %d.\n", foo, bar)
+        Std.Console.Log("Hello, World!\n")
+        Console.Log("Foo is %d and bar is %d.\n", foo, bar)
 
         foo = 2^8 - 1 #255
-        Console.Out("Now, foo is %d and bar is %d!\n", foo, bar)
+        Console.Log("Now, foo is %d and bar is %d!\n", foo, bar)
 
         ###
         #   ATTENTION!
-        #   Compiler is throwing a wanrning about the line bellow
+        #   Compiler is throwing a warning about the line bellow
         #   as 256 will cause a overflow on the int8 (byte) type.
         #   The code is still compilable, but foo will be 0.
         ###
@@ -44,17 +45,18 @@ namespace MyProgram {
 
         # preprocessed inline assemby x86 code :O
         asm jmp GoodBye()
+        # (obviously will not work for every target!)
 
     }
 
     # Mathematical abstraction #
-    publicFunc i32 Square(i32 number) => number ^ 2
-    publicFunc i32 IsEven(i32 number) => number % 2 == 0
-    publicFunc i32 IsOdd(i32 number) => number % 2 != 0
+    public func i32 Square(i32 number) => number ** 2
+    public func i32 IsEven(i32 number) => number % 2 == 0
+    public func i32 IsOdd(i32 number) => number % 2 != 0
 
-    privateFunc GoodBye() {
+    private func GoodBye() {
 
-        Console.Out("Goodbye, %s!\n", "World")
+        Console.Log("Goodbye, %s!\n", "World")
         return
 
     }
@@ -64,18 +66,18 @@ namespace MyProgram {
 
 # Primitive data types
 ```
-### UNSIGNED INTEGERS (0 <>=> 256^n-1) ###
-# u8, byte  :               0 <=>    (255)
-# u16       :                0 <=>   256^2-1 (65,024)
-# u32       :                0 <=>   256^4-1 (4,228,250,625)
-# u64       :                0 <=>   256^8-1 (18,446E+15 ±)
+### UNSIGNED INTEGERS (0 <=> 256^n-1) ###
+# u8, byte  :  1 byte
+# u16       :  2 bytes
+# u32       :  4 bytes
+# u64       :  8 bytes
 # u128 temporarily removed
 
 ### SIGNED INTEGERS (irdk) ###
-# i8        :             -128 <=> 127
-# i16       :          -32,768 <=> 32,767
-# i32       :   -2,147,483,648 <=> 2,147,483,647
-# i64       : -9,223,372E+12 ± <=> ±9,223,372E+12 ±
+# i8        :  1 byte
+# i16       :  2 bytes
+# i32       :  4 bytes
+# i64       :  8 bytes
 # i128 : temporarily removed
 
 
@@ -85,12 +87,12 @@ namespace MyProgram {
 
 
 ### BOOLEANS ###
-bool : true(0) <=> false(!0)
+bool : true (1) <=> false (0)
 
 
 ### CHARACTERS AND STRINGS ###
 # char   : 4 bytes (32b) - stores an character encoded as UTF-8
-# string : dynamic       - immutable 'array' of bytes, encoded as UTF-8
+# string : dynamic       - imuttable array of bytes, encoded as UTF-8
 
 ### ARRAYS ###
 # to define arrays, you need to add "[]" before the
@@ -120,7 +122,8 @@ bool : true(0) <=> false(!0)
 
 let i8 myByte = 10
 let *i8 myByteRef
-*myByteRef = &myByte
+*myByteRef = &myByte   # directly setting the reference
+myByteRef = myByte     # indirectly setting the reference
 let myByteRef = 20
 # both 'myByte' and 'myByteRef' will now refer to 20
 
@@ -132,10 +135,18 @@ let myByteRef = 20
 let i8 myByte = 10
 let *i8 myPtr1
 let *i8 myPtr2
-*myPtr1 = &myByte
+myPtr1 = myByte
 *myPtr2 = *myPtr1
 myPtr2 = 20
 # 'myByte', 'myPtr1' and 'myPtr2' will now refer to 20
+
+### watch out! ###
+
+myPtr1 = myPtr2 # is different of
+*myPtr1 = &myPtr2
+
+# cause 'myPtr1' will now store a reference to the pointer's adress, and not the
+# data being pointed!
 
 
 ### IN PRACTICE ###
@@ -144,7 +155,7 @@ myPtr2 = 20
 let i8  myByte
 let i16 myShort = 20
 
-# constants can be also defined with the keyword 'const':
+# immutable variables (or constants) can be also defined with the keyword 'const':
 const u32 ConstantInteger = 0
 
 ```
@@ -157,7 +168,7 @@ const u32 ConstantInteger = 0
 # expression in front of it and execute what follows the '=>'
 # arrow operator.
 # the basic structure of the if conditional is:
-#> if [bool] => execute if true...
+#> if [boolean value] => execute if true...
 # e. g.:
 
 let bool getCake = # insert here an dynamic value
@@ -190,9 +201,9 @@ if roundEarth => {
 if someBoolean => Std.Console.Log("This is true!")
 else => Std.Console.Log("This is false!")
 
-# if instead of a imple else, the code needs to evaluate another
+# if instead of a simple else, the code needs to evaluate another
 # condition if the first one is false, it's used the keyword 'elif'
-# as the same way as int the 'if' statement.
+# as the same way as in the first 'if' statement.
 
 if someBoolean1 => Std.Console.Log("This thing is true!")
 elif someBoolean2 => Std.Console.Log("These thing is true!")

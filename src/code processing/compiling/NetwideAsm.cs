@@ -54,8 +54,8 @@ public class NasmCompiler : BaseCompiler
 
     private void CompileLibs(string libPath)
     {
-        string[] assembly = File.ReadAllText(libPath).Replace(":", ":\n").Replace("\r\n", "\n")
-        .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        string[] assembly = File.ReadAllText(libPath).Replace("\r\n", "\n")
+        .Split('\n', StringSplitOptions.TrimEntries);
 
         Dictionary<string, int> sections = [];
         Dictionary<string, int> code_labels = [];
@@ -80,13 +80,16 @@ public class NasmCompiler : BaseCompiler
         {
             for (var i = section.Value+1; i < assembly.Length; i++)
             {
+                if (string.IsNullOrEmpty(assembly[i])) continue;
                 if (assembly[i].StartsWith("section")) break;
+
+                var a = assembly[i];
 
                 var line = assembly[i].Split((char[])[' ', '\t'], StringSplitOptions.RemoveEmptyEntries);
 
                 string original_label = line[0];
                 string size = line[1]; // the data size (db, dw, dd, dq)
-                string value = string.Join("", line[2..]);
+                string value = string.Join(" ", line[2..]);
 
                 data_labels.Add(original_label, builder.StoreHardcoded($"{size} {value}"));
             }
@@ -96,6 +99,7 @@ public class NasmCompiler : BaseCompiler
         {
             for (var i = text_section + 1; i < assembly.Length; i++)
             {
+                if (string.IsNullOrEmpty(assembly[i])) continue;
                 if (assembly[i].StartsWith("section")) break;
 
                 var line = assembly[i].Split(';')[0].Trim();
@@ -127,6 +131,7 @@ public class NasmCompiler : BaseCompiler
                 {
                     foreach (var j in data_labels)
                         line = line.Replace(j.Key, j.Value);
+                    line = line.Replace("__?LINE?__", $"{i+1}");
 
                     var tokens = line.Split(' ', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).ToArray();
 

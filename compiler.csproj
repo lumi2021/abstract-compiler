@@ -17,4 +17,10 @@
     </Content>
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Remove="test-code\**" />
+    <EmbeddedResource Remove="test-code\**" />
+    <None Remove="test-code\**" />
+  </ItemGroup>
+
 </Project>

@@ -1,5 +1,7 @@
 global _main
-extern _printf, _fgetc, _malloc, _realloc, _free
+
+extern _printf, _putchar, _malloc, _realloc, _free
+extern __getch
 
 section .text
 
@@ -22,6 +24,10 @@ Std.Console@Log?i32:
     push DWORD[ESP + 4]
     push format_sint
     call _printf
+
+    push line_feed
+    call _printf
+    ADD ESP, 12
 
     pop EBX
     add ESP, 4
@@ -50,104 +56,101 @@ Std.Console@Log?str:
     jmp EBX
 
 Std.Console@Read?:
-    enter 17, 0
+    enter 20, 0
     ; *char (4)  buffer  ->  BP - 4
     ; u32   (4)  size    ->  BP - 8
-    ; char  (1)  char    ->  BP - 9
-    ; u32   (4)  length  ->  BP - 13
+    ; char  (1)  char    ->  BP - 12
+    ; u32   (4)  length  ->  BP - 16
 
-    ; test for non-null values
-    test DWORD[EBP + 4], 0
-    jz .err
-    test DWORD[EBP + 8], 0
-    jz .err
-    test DWORD[EBP + 12], 0
-    jz .err
+    ; initialize variables
+    mov DWORD[EBP - 8], 16 ; size = 16
+    mov DWORD[EBP - 16], 0 ; length = 0
 
-    ; initialize the buffer
-    mov DWORD[EBP - 8], 98
-    push DWORD[EBP - 8]
+    ; allocate buffer
+    push 16
     call _malloc
-    add ESP, 4
+
     mov DWORD[EBP - 4], EAX
 
-    test EAX, 0
-    jz .err
+    cmp EAX, 0
+    je .err
 
-    ; loop though the string
-    .while_001:
-        call _fgetc
-        movzx EAX, al
-        cmp EAX, 0
-        jl .break_001
-        mov DWORD[BP - 9], EAX
+    .while_getchar:
+        call __getch
+        mov BYTE[EBP - 12], AL
 
-        mov EAX, DWORD[EBP - 13]
-        inc EAX
+        cmp AL, 13
+        je .end_while
+
+        push EAX
+        call _putchar
+        pop EAX
+
+        mov EAX, DWORD[EBP - 16]
         cmp EAX, DWORD[EBP - 8]
         jl .endif_001
-
-            sal DWORD[EBP - 8], 1
-
-            push DWORD[ebp - 8]
-            push DWORD[ebp - 4]
-            call _realloc
-            add ESP, 64
-
-            test EAX, 0
-            jne .l_0001
-                push DWORD[EBP - 4]
-                call _free
-                add ESP, 4
-                jmp .err
-            .l_0001:
-            mov [EBP - 4], EAX
+            mov EAX, DWORD[EBP - 8]
+            sal EAX, 1
+            mov DWORD[EBP - 8], EAX
             
+            push DWORD[EBP - 8]
+            push DWORD[EBP - 4]
+            call _realloc
+
+            cmp EAX, 0
+            je .err
+
+            mov DWORD[EBP - 4], EAX
         .endif_001:
-
-        cmp DWORD[EBP - 9], 10 ; 10 = '\n' char
-        je .break_001
-
-        mov EAX , DWORD[BP - 4] ; pointer
-        mov EBX, DWORD[EBP - 13] ; index
-        mov ECX, DWORD[EBP - 9] ; value
-        mov DWORD[EAX + EBX * 4], ECX
-        inc DWORD[EBP - 13]
-    .break_001:
-
-    ; return a new empty array if length = 0
-    cmp DWORD[EBP - 13], 0
-    jne .l_0002
-    push 0
-    mov EAX, empty_array
-    jmp .ok
-    .l_0002:
-
-    ; u32   (4)  new_str  ->  BP - 17
-
-    ; generate the new ASCII string
-    push DWORD[EBP - 13]
-    call Std.Memory@GenString?i32
-    mov DWORD[EBP - 17], EAX
-
-    mov EBX, DWORD[EBP - 4] ; buffer ptr
-    mov ECX, 0              ; i
-    .while_002:
-        inc EDX
         
-        mov al, BYTE[EBX + ECX]
-        mov BYTE[EAX + ECX + 4], al
+        mov EAX, DWORD[EBP -  4]   ; base addr
+        mov EBX, DWORD[EBP - 16]   ; index
+        mov DL,   BYTE[EBP - 12]   ; character
+        mov BYTE[EAX + EBX], DL
+
+        inc DWORD[EBP - 16]
+
+        jmp .while_getchar
+    .end_while:
+
+    ; feeding line
+    push line_feed
+    call _printf
+    add ESP, 4
+
+    ; creating and feeding the string data structure
+    push DWORD[EBP - 16]
+    call Std.Memory@GenString?i32
+
+    cmp EAX, 0
+    je .err
+
+    push EAX
+
+    mov EDX, DWORD[EBP - 4] ; EDX is the buffer addr
+    mov EBX, EAX ; EBX is the string char data base
+    mov ECX, 0 ; indexer
+
+    mov EAX, 0
+    .for_start:
+        cmp ECX, DWORD[EBP - 16]
+        jge .for_break
+
+        mov AL, BYTE[EDX + ECX]
+        mov BYTE[EBX + 4 + ECX], AL
 
         inc ECX
-        cmp ECX, DWORD[EBP - 13]
-        jl .while_002
+        jmp .for_start
+    .for_break:
     
-    push DWORD[EBP - 4]
-    call _free
-    add ESP, 4
+    pop EAX
 
     jmp .ok
     .err:
+        push error_str
+        call _printf
+        add ESP, 4
+
         mov eax, 0
     .ok:
         leave
@@ -162,26 +165,97 @@ Std.Type.Casting@Cast_i64?str:
 Std.Memory@GenArray?i32:
 
 Std.Memory@GenString?i32:
-    mov EAX, DWORD[EBP + 4]
+    mov EAX, DWORD[ESP + 4]
     add EAX, 5 ; length + \0
+
     push EAX
     call _malloc
     add ESP, 4
 
-    test EAX, 0
-    jz .err
+    cmp EAX, 0
+    je .err
 
-    mov EBX, DWORD[EBP + 4]
+    mov EBX, DWORD[ESP + 4]
     mov BYTE[EAX + 4 + EBX], 0 ; null char at the end
 
+    jmp .ok
     .err:
+        push error_str
+        call _printf
+        add ESP, 4
         mov EAX, 0
     .ok:
         ret
 
 Std.Memory@LoadString?str:
 
+___dbg___@logLineNumber?i32:
+    push EAX
+    push DWORD[ESP + 8]
+    push line_number
+    call _printf
+    add ESP, 8
+    pop EAX
+
+    pop EBX
+    add ESP, 4
+    jmp EBX
+___dbg___@logAccumulator?:
+    push EBX
+    push ECX
+    push EDX
+
+    push EAX
+    push eax_reg_value
+    call _printf
+    add ESP, 4
+
+    pop EAX
+    pop EDX
+    pop ECX
+    pop EBX
+
+    ret
+___dbg___@logBase?:
+    push EAX
+    push ECX
+    push EDX
+
+    push EBX
+    push ebx_reg_value
+    call _printf
+    add ESP, 4
+
+    pop EBX
+    pop EDX
+    pop ECX
+    pop EAX
+
+    ret
+___dbg___@logCounter?:
+    push EAX
+    push EBX
+    push EDX
+
+    push ECX
+    push ecx_reg_value
+    call _printf
+    add ESP, 4
+
+    pop ECX
+    pop EDX
+    pop EBX
+    pop EAX
+
+    ret
+
 section .rodata
+	line_number         db 9, "line:_ %i", 10, 0
+	eax_reg_value       db 9, "EAX: %i", 10, 0
+	ebx_reg_value       db 9, "EBX: %i", 10, 0
+	ecx_reg_value       db 9, "ECX: %i", 10, 0
+	error_str           db 9, "[Error!]", 10, 0
+
 	format_sint         db "%i", 0
 	format_uint         db "%u", 0
 	format_float        db "%f", 0

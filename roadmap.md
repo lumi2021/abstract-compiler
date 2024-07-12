@@ -85,6 +85,8 @@ The steps of the entire proccess to finish the compiler
 ```
 ```
 [ ] default compilation targets
+╠══ [\] Abstracted intermediate language (text mode)
+╠══ [x] Abstracted intermediate language (binary mode)
 ╠══ [ ] 16 bit assembly
 ╠══ [\] x86 assembly
 ╠══ [ ] x64 assembly

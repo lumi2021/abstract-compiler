@@ -189,6 +189,8 @@ public class NASMBuilder
 
     public static class OpCodes
     {
+        public static IAsmInstruction Nop()                                  => new Op_Nop();
+
         public static IAsmInstruction Enter(uint size)                       => new Op_Enter(size);
         public static IAsmInstruction Leave()                                => new Op_Leave();
 
@@ -218,6 +220,12 @@ public class NASMBuilder
         public static IAsmInstruction Unknown(string text)                   => new Op_Unknown(text);
 
         #region OpCodes structures
+
+        private readonly struct Op_Nop : IAsmInstruction
+        {
+            public string ToAsmStruction() => "NOP";
+            public string ToAsmParameter() => $"";
+        }
 
         private readonly struct Op_Enter(uint size) : IAsmInstruction
         {
@@ -342,12 +350,25 @@ public class NASMBuilder
             public string ToAsmParameter() => $"{Reg2String(_reg)}, 0x{_value:X}";
         }
 
-        private readonly struct Op_Hardcoded(string content) : IAsmInstruction
+        private readonly struct Op_Hardcoded : IAsmInstruction
         {
-            private readonly string _value = content;
 
-            public string ToAsmStruction() => _value[.. Math.Max(_value.IndexOf(' '), 0)].ToUpper();
-            public string ToAsmParameter() => _value[Math.Max(_value.IndexOf(' '), 0) ..];
+            private readonly string _opcode;
+            private readonly string _args;
+
+            public Op_Hardcoded(string content)
+            {
+                int fsi = content.IndexOf(' ');
+
+                _opcode = content[..(fsi >= 0 ? fsi : content.Length)].ToUpper().Trim();
+                _args = (fsi >= 0
+                    ? _args = content[fsi..].Trim()
+                    :   _args = ""
+                );
+            }
+
+            public string ToAsmStruction() => _opcode;
+            public string ToAsmParameter() => _args;
         }
         private readonly struct Op_HardcodedJmp(string opcode, AsmJumpBridge bridge) : IAsmInstruction
         {
@@ -389,6 +410,15 @@ public class NASMBuilder
         Base_x64, Base_x32, Base_x16,
         Count_x64, Count_x32, Count_x16,
         Data_x64, Data_x32, Data_x16,
+
+        R8_x64, R8_x32, R8_x16,
+        R9_x64, R9_x32, R9_x16,
+        R10_x64, R10_x32, R10_x16,
+        R11_x64, R11_x32, R11_x16,
+        R12_x64, R12_x32, R12_x16,
+        R13_x64, R13_x32, R13_x16,
+        R14_x64, R14_x32, R14_x16,
+        R15_x64, R15_x32, R15_x16,
         
         Instruction,
         StackPointer,
