@@ -6,7 +6,6 @@ using Compiler.Util.Compilation;
 
 namespace Compiler.CodeProcessing.Evaluating;
 
-
 public static class Evaluation
 {
 
@@ -15,7 +14,6 @@ public static class Evaluation
 
     public static CompilationRoot EvalSource(ScriptNode[] scripts)
     {
-
         allNamespaces = [];
         allMethods = [];
 
@@ -178,8 +176,6 @@ public static class Evaluation
                         var t1 = EvaluateExpressionType(@assigin.assigne);
                         var t2 = EvaluateExpressionType(@assigin.value);
 
-                        Console.WriteLine($"{t1} <- {t2}");
-
                         if (t1 != t2)
                         {
                             if (t2.IsAssignableTo(t1))
@@ -296,6 +292,12 @@ public static class Evaluation
         return;
     }
 
+    private static bool IsBinaryExpression(ExpressionNode exp)
+    {
+        return exp is BinaryExpressionNode @bin
+            && ((string[])["<", ">", "==", "!=", "<=", ">="]).Contains(bin.expOperator);
+    }
+
     private static StatementNode TryReduceStatement(StatementNode stat)
     {
 
@@ -351,6 +353,9 @@ public static class Evaluation
 
     private static ExpressionNode ReduceBinaryExp(BinaryExpressionNode exp)
     {
+        string[] numericOps = ["+", "-", "*", "/"];
+        string[] booleanOps = ["<", ">", "==", "!=", "<=", ">="];
+
         var bop = new TempBinaryExp(exp.expOperator)
         {
             left = exp.leftStatement,
@@ -359,22 +364,44 @@ public static class Evaluation
 
         bop.left = ReduceExpression(bop.left);
         bop.right = ReduceExpression(bop.right);
-        
-        if (bop.left is NumericLiteralNode @lnum && bop.right is NumericLiteralNode @rnum)
-        {
-            return new NumericLiteralNode() {value = bop.op switch
-            {
-                "+" => @lnum.value + @rnum.value,
-                "-" => @lnum.value - @rnum.value,
-                "*" => @lnum.value * @rnum.value,
-                "/" => @lnum.value / @rnum.value,
-                "%" => @lnum.value % @rnum.value,
 
-                _ => throw new NotImplementedException(),
-            }
+        if (numericOps.Contains(bop.op)
+            && bop.left is NumericLiteralNode @lnum1 && bop.right is NumericLiteralNode @rnum1)
+        {
+            return new NumericLiteralNode()
+            {
+                value = bop.op switch
+                {
+                    "+" => @lnum1.value + @rnum1.value,
+                    "-" => @lnum1.value - @rnum1.value,
+                    "*" => @lnum1.value * @rnum1.value,
+                    "/" => @lnum1.value / @rnum1.value,
+                    "%" => @lnum1.value % @rnum1.value,
+
+                    _ => throw new NotImplementedException(),
+                }
             };
         }
 
+        else if (booleanOps.Contains(bop.op)
+            && bop.left is NumericLiteralNode @lnum2 && bop.right is NumericLiteralNode @rnum2)
+        {
+            return new BooleanLiteralNode()
+            {
+                value = bop.op switch
+                {
+                    ">"  => lnum2.value > rnum2.value,
+                    "<"  => lnum2.value < rnum2.value,
+                    "==" => lnum2.value == rnum2.value,
+                    "!=" => lnum2.value != rnum2.value,
+                    "<=" => lnum2.value <= rnum2.value,
+                    ">=" => lnum2.value >= rnum2.value,
+
+                    _ => throw new NotImplementedException(),
+                }
+            };
+        }
+        
         else
         {
             exp.leftStatement = bop.left;
@@ -440,6 +467,12 @@ public static class Evaluation
             
             if (@ifstat.elseStatement != null)
                 EvaluateElseIdentifiers(@ifstat.elseStatement, mt, localVariables, ref localIndex);
+        }
+
+        else if (stat is ScopeNode @scope)
+        {
+            foreach (var i in scope)
+                EvaluateStatementIdentifiers(i, mt, localVariables, ref localIndex);
         }
 
         else mt.ScriptRef.ThrowError(
@@ -591,13 +624,11 @@ public static class Evaluation
             EvaluateStatementIdentifiers(elseStat.result, mt!, decVars, ref localIndex);
 
         if (@elseStat.elseStatement != null)
-                EvaluateElseIdentifiers(@elseStat.elseStatement, mt, decVars, ref localIndex);
+            EvaluateElseIdentifiers(@elseStat.elseStatement, mt, decVars, ref localIndex);
     }
 
     private static TypeItem EvaluateExpressionType(ExpressionNode exp)
     {
-        Console.WriteLine($"{exp} ({exp.GetType().Name})");
-
         if (exp is MethodCallNode @call)
             return @call.target.refersToType;
         
@@ -693,7 +724,7 @@ public static class Evaluation
         // search for a totally qualified name
         var matchingNamespaces = allNamespaces.Where(e =>
             e is ExplicitNamespaceItem exp
-            && methodReference.Len > exp.name.Len
+            && methodReference.Len > exp.GetGlobalPath().Length
             && exp.name == new Identifier(null!, [.. methodReference.values[.. exp.name.Len]]))
         .ToArray();
 
@@ -708,7 +739,7 @@ public static class Evaluation
                 if (itens.Length > 0) return itens;
             }
 
-            // TODO implecit namespaces
+            // TODO implicit namespaces
 
         }
 
@@ -747,10 +778,13 @@ public static class Evaluation
         {
             return IfToAsm(@ifstat);
         }
-
-        else if (stat is ElseStatementNode @elsestat)
+        
+        else if (stat is ScopeNode @scope)
         {
-            return ElseToAsm(@elsestat);
+            List<IntermediateInstruction> insts = [];
+            foreach (var i in scope)
+                insts.AddRange(StatementToAsm(i));
+            return [.. insts];
         }
 
         else throw new InstructionProcessingNotImplementedException(stat.GetType().Name);
@@ -846,8 +880,6 @@ public static class Evaluation
                 }
             }
 
-            Console.WriteLine(assiginType);
-
             // load the value on stack
             rist.AddRange(ExpressionToAsm(assigin.value, assiginType));
 
@@ -857,8 +889,9 @@ public static class Evaluation
 
         else if (exp is MethodCallNode @mCall)
         {
-            foreach (var i in @mCall.arguments)
-                rist.AddRange(ExpressionToAsm(i));
+            var targetedMethod = (@mCall.target.refersTo as MethodItem)!;
+            for (int i = 0; i < targetedMethod.Parameters.Count; i++)
+                rist.AddRange(ExpressionToAsm(mCall.arguments[i], targetedMethod.Parameters[i].type));
 
             if (@mCall.target.refersTo is MethodItem @method)
                 rist.Add(OpCode.CallStatic(@method));
@@ -867,9 +900,11 @@ public static class Evaluation
         else if (exp is TypeCastingExpressionNode @tCast)
         {
             var typeToConvert = new TypeItem(@tCast.type);
+            var leftType = EvaluateExpressionType(tCast.expression);
 
-            rist.AddRange(ExpressionToAsm(@tCast.expression, typeToConvert));
-            if (expectedType! != typeToConvert)
+            rist.AddRange(ExpressionToAsm(@tCast.expression));
+
+            if (expectedType! != typeToConvert || leftType != typeToConvert)
             {
                 string IlTypeString = new TypeItem(@tCast.type).Value.ToIlString();
                 rist.Add(OpCode.Conv(IlTypeString));
@@ -885,11 +920,20 @@ public static class Evaluation
     {
         List<IntermediateInstruction> instructions = [];
 
-        // Get the condition
-        instructions.AddRange(ExpressionToAsm(ifstat.condition));
-
-        // Calculate the conditional
-        instructions.Add(OpCode.If(ConditionMethod.True));
+        if (IsBinaryExpression(ifstat.condition))
+        // Binary expression, short-circuit to be made
+        {
+            // Get the conditionals for all conditions
+            instructions.AddRange(BooleanConditionalToAsm((ifstat.condition as BinaryExpressionNode)!));
+        }
+        else
+        // No binary expression, no short-circuit
+        {
+            // Get the condition
+            instructions.AddRange(ExpressionToAsm(ifstat.condition));
+            // Calculate the conditional
+            instructions.Add(OpCode.If(ConditionMethod.True));
+        }
 
         // Append scope content
         instructions.AddRange(StatementToAsm(ifstat.result!));
@@ -911,8 +955,20 @@ public static class Evaluation
         // Get the condition and calculate the conditional
         if (elseStat.condition != null)
         {
-            instructions.AddRange(ExpressionToAsm(elseStat.condition));
-            instructions.Add(OpCode.If(ConditionMethod.True));
+            if (IsBinaryExpression(elseStat.condition))
+            // Binary expression, short-circuit to be made
+            {
+                // Get the conditionals for all conditions
+                instructions.AddRange(BooleanConditionalToAsm((elseStat.condition as BinaryExpressionNode)!));
+            }
+            else
+            // No binary expression, no short-circuit
+            {
+                // Get the condition
+                instructions.AddRange(ExpressionToAsm(elseStat.condition));
+                // Calculate the conditional
+                instructions.Add(OpCode.If(ConditionMethod.True));
+            }
         }
 
         // Append scope content
@@ -920,6 +976,38 @@ public static class Evaluation
 
         if (elseStat.elseStatement != null)
             instructions.AddRange(ElseToAsm(elseStat.elseStatement));
+
+        if (elseStat.condition != null)
+            instructions.Add(OpCode.EndIf());
+
+        return [.. instructions];
+    }
+
+    private static IntermediateInstruction[] BooleanConditionalToAsm(BinaryExpressionNode exp)
+    {
+        List<IntermediateInstruction> instructions = [];
+
+        instructions.AddRange(ExpressionToAsm(exp.leftStatement));
+
+        if (exp.rightStatement is NumericLiteralNode @numeric)
+        {
+            ConditionMethod ifConditionMethod = exp.expOperator switch
+            {
+                "<" => ConditionMethod.Lesser,
+                "<=" => ConditionMethod.LesserEqual,
+
+                ">" => ConditionMethod.Greater,
+                ">=" => ConditionMethod.GreaterEqual,
+
+                "==" => ConditionMethod.Equal,
+                "!=" => ConditionMethod.Unequal,
+
+                _ => throw new InvalidOperationException()
+            };
+
+            instructions.Add(OpCode.If(ifConditionMethod, $"{numeric.value}"));
+
+        }
 
         return [.. instructions];
     }

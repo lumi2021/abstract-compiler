@@ -1,7 +1,13 @@
 global _main
 
-extern _printf, _putchar, _malloc, _realloc, _free
+; stdio
+extern _printf, _putchar
+; conio
 extern __getch
+; malloc
+extern _malloc, _realloc, _free
+; stdlib
+extern _atoi
 
 section .text
 
@@ -161,6 +167,15 @@ Std.Type.String@Equals?str_str:
 Std.Type.Casting@Cast_i8?str:
 Std.Type.Casting@Cast_i16?str:
 Std.Type.Casting@Cast_i32?str:
+    mov EAX, DWORD[ESP + 4]
+    add EAX, 4
+    push EAX
+    call _atoi
+    add ESP, 4
+    pop EBX
+    add ESP, 4
+    jmp EBX
+
 Std.Type.Casting@Cast_i64?str:
 Std.Memory@GenArray?i32:
 
@@ -250,7 +265,7 @@ ___dbg___@logCounter?:
     ret
 
 section .rodata
-	line_number         db 9, "line:_ %i", 10, 0
+	line_number         db 9, "line: %i", 10, 0
 	eax_reg_value       db 9, "EAX: %i", 10, 0
 	ebx_reg_value       db 9, "EBX: %i", 10, 0
 	ecx_reg_value       db 9, "ECX: %i", 10, 0

@@ -201,7 +201,7 @@ public class NASMBuilder
         public static IAsmInstruction Mov(LocalVariable local, Register reg) => new Op_Mov_Local_To_Reg(reg, local);
 
         public static IAsmInstruction Mov(Register reg, Argument arg)        => new Op_Mov_Reg_To_Arg(arg, reg);
-         public static IAsmInstruction Mov(long value, Argument arg)         => new Op_Mov_Const_To_Arg(arg, value);
+        public static IAsmInstruction Mov(long value, Argument arg)          => new Op_Mov_Const_To_Arg(arg, value);
 
         public static IAsmInstruction Mov(Register reg, LocalVariable local) => new Op_Mov_Reg_To_Local(local, reg);
 
@@ -212,6 +212,21 @@ public class NASMBuilder
         public static IAsmInstruction Add(Register rega, Register regb)      => new Op_Add_Reg_Reg(rega, regb);
 
         public static IAsmInstruction Sub(Register reg, long value)          => new Op_Sub_Reg_Const(reg, value);
+
+        public static IAsmInstruction Jump(AsmJumpBridge bridge)             => new Op_Jmp(bridge);
+        public static IAsmInstruction JumpIfEquals(AsmJumpBridge bridge)     => new Op_JE(bridge);
+        public static IAsmInstruction JumpIfNotEquals(AsmJumpBridge bridge)  => new Op_JNE(bridge);
+        public static IAsmInstruction JumpIfZero(AsmJumpBridge bridge)       => new Op_JZ(bridge);
+        public static IAsmInstruction JumpIfNotZero(AsmJumpBridge bridge)    => new Op_JNZ(bridge);
+        public static IAsmInstruction JumpIfGreater(AsmJumpBridge bridge)    => new Op_JG(bridge);
+        public static IAsmInstruction JumpIfLesser(AsmJumpBridge bridge)     => new Op_JL(bridge);
+        public static IAsmInstruction JumpIfGreatEqual(AsmJumpBridge bridge) => new Op_JGE(bridge);
+        public static IAsmInstruction JumpIfLessEqual(AsmJumpBridge bridge)  => new Op_JLE(bridge);
+
+        public static IAsmInstruction Cmp(long ca, long cb)                  => new Op_Cmp_Const_And_Const(ca, cb);
+        public static IAsmInstruction Cmp(Register reg, long c)              => new Op_Cmp_Reg_And_Const(reg, c);
+        public static IAsmInstruction Cmp(LocalVariable local, long c)       => new Op_Cmp_Local_And_Const(local, c);
+        public static IAsmInstruction Cmp(Argument arg, long c)              => new Op_Cmp_Arg_And_Const(arg, c);
 
         public static IAsmInstruction Hardcoded(string content)              => new Op_Hardcoded(content);
         public static IAsmInstruction HardcodedJmp
@@ -247,6 +262,46 @@ public class NASMBuilder
             public string ToAsmStruction() => "CALL";
             public string ToAsmParameter() => _target;
         }
+
+        #region Comparation
+
+        private readonly struct Op_Cmp_Const_And_Const(long constA, long constB) : IAsmInstruction
+        {
+            private readonly long _valueA = constA;
+            private readonly long _valueB = constB;
+
+            public string ToAsmStruction() => "CMP";
+            public string ToAsmParameter() => $"0x{_valueA:X}, 0x{_valueB:X}";
+        }
+        private readonly struct Op_Cmp_Reg_And_Const(Register reg, long constant) : IAsmInstruction
+        {
+            private readonly Register _valueA = reg;
+            private readonly long _valueB = constant;
+
+            public string ToAsmStruction() => "CMP";
+            public string ToAsmParameter() => $"{Reg2String(_valueA)}, 0x{_valueB:X}";
+        }
+        private readonly struct Op_Cmp_Local_And_Const(LocalVariable localRelative, long constant) : IAsmInstruction
+        {
+            private readonly LocalVariable _valueA = localRelative;
+            private readonly long _valueB = constant;
+
+            public string ToAsmStruction() => "CMP";
+            public string ToAsmParameter() => $"{_valueA}, 0x{_valueB:X}";
+        }
+        private readonly struct Op_Cmp_Arg_And_Const(Argument arg, long constant) : IAsmInstruction
+        {
+            private readonly Argument _valueA = arg;
+            private readonly long _valueB = constant;
+
+            public string ToAsmStruction() => "CMP";
+            public string ToAsmParameter() => $"{_valueA}, 0x{_valueB:X}";
+        }
+
+        #endregion
+
+        #region jumps
+
         private readonly struct Op_Jmp(AsmJumpBridge bridge) : IAsmInstruction
         {
             private readonly AsmJumpBridge _to = bridge;
@@ -254,8 +309,71 @@ public class NASMBuilder
             public string ToAsmStruction() => "JMP";
             public string ToAsmParameter() => $"{_to}";
         }
+        
+        private readonly struct Op_JE(AsmJumpBridge bridge) : IAsmInstruction
+        {
+            private readonly AsmJumpBridge _to = bridge;
+
+            public string ToAsmStruction() => "JE";
+            public string ToAsmParameter() => $"{_to}";
+        }
+        private readonly struct Op_JNE(AsmJumpBridge bridge) : IAsmInstruction
+        {
+            private readonly AsmJumpBridge _to = bridge;
+
+            public string ToAsmStruction() => "JNE";
+            public string ToAsmParameter() => $"{_to}";
+        }
+        
+        private readonly struct Op_JZ(AsmJumpBridge bridge) : IAsmInstruction
+        {
+            private readonly AsmJumpBridge _to = bridge;
+
+            public string ToAsmStruction() => "JZ";
+            public string ToAsmParameter() => $"{_to}";
+        }
+        private readonly struct Op_JNZ(AsmJumpBridge bridge) : IAsmInstruction
+        {
+            private readonly AsmJumpBridge _to = bridge;
+
+            public string ToAsmStruction() => "JNZ";
+            public string ToAsmParameter() => $"{_to}";
+        }
+        
+        private readonly struct Op_JG(AsmJumpBridge bridge) : IAsmInstruction
+        {
+            private readonly AsmJumpBridge _to = bridge;
+
+            public string ToAsmStruction() => "JG";
+            public string ToAsmParameter() => $"{_to}";
+        }
+        private readonly struct Op_JL(AsmJumpBridge bridge) : IAsmInstruction
+        {
+            private readonly AsmJumpBridge _to = bridge;
+
+            public string ToAsmStruction() => "JL";
+            public string ToAsmParameter() => $"{_to}";
+        }
+
+        private readonly struct Op_JGE(AsmJumpBridge bridge) : IAsmInstruction
+        {
+            private readonly AsmJumpBridge _to = bridge;
+
+            public string ToAsmStruction() => "JGE";
+            public string ToAsmParameter() => $"{_to}";
+        }
+        private readonly struct Op_JLE(AsmJumpBridge bridge) : IAsmInstruction
+        {
+            private readonly AsmJumpBridge _to = bridge;
+
+            public string ToAsmStruction() => "JLE";
+            public string ToAsmParameter() => $"{_to}";
+        }
+
+        #endregion
 
         #region MOV
+
         private readonly struct Op_Mov_Const_To_Reg(Register reg, long constant) : IAsmInstruction
         {
             private readonly Register _to = reg;
@@ -314,6 +432,7 @@ public class NASMBuilder
             public string ToAsmStruction() => "MOV";
             public string ToAsmParameter() => $"{Reg2String(_to)}, {_from}";
         }
+        
         #endregion
 
         private readonly struct Op_Add_Reg_Const(Register reg, long constant) : IAsmInstruction

@@ -112,6 +112,9 @@ public class CompilationRoot(StatementNode referTo) : CompStruct(referTo)
 
 public abstract class NamespaceItem(StatementNode referTo, CompilationRoot parent, Script source) : CompStruct(referTo, parent), IReferenceable
 {
+    public NamespaceItem? parent = null;
+    public List<NamespaceItem> children = [];
+
     public List<FieldItem> globalFields = [];
     public List<MethodItem> methods = [];
 
@@ -123,17 +126,19 @@ public abstract class NamespaceItem(StatementNode referTo, CompilationRoot paren
         set => _parent = value;
     }
 
-    public virtual string[] GetGlobalPath() => [$"{GetHashCode()}"];
-    public virtual string GetGlobalReference() => $"{GetHashCode()}";
+    public virtual string[] GetGlobalPath() => [.. (parent != null ? parent.GetGlobalPath() : []), $"{GetHashCode()}"];
+    public virtual string GetGlobalReference() => string.Join('.', GetGlobalPath());
 }
 
-public class ImplicitNamespaceItem(Script source, StatementNode referTo, CompilationRoot parent) : NamespaceItem(referTo, parent, source) {}
+public class ImplicitNamespaceItem(Script source, StatementNode referTo, CompilationRoot parent) : NamespaceItem(referTo, parent, source)
+{
+}
 public class ExplicitNamespaceItem(Script source, StatementNode referTo, CompilationRoot parent) : NamespaceItem(referTo, parent, source)
 {
     public Identifier name = new();
 
-    public override string[] GetGlobalPath() => [.. name.values];
-    public override string GetGlobalReference() => string.Join('.', name.values);
+    public override string[] GetGlobalPath() => [.. (parent != null ? parent.GetGlobalPath() : []), .. name.values];
+    public override string GetGlobalReference() => string.Join('.', GetGlobalPath());
 }
 
 

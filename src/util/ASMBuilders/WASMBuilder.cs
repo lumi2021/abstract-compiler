@@ -15,7 +15,6 @@ public class WASMBuilder
         return Module;
     }
 
-
     public class WasmModule
     {
         private List<WasmImportedMethod> _imports = [];

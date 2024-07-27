@@ -64,6 +64,8 @@ public static class Parser
             TokenType.AsmKeyword => ParseInlineAsm(),
 
             TokenType.IfKeyword => ParseIfStatement(),
+            TokenType.ElifKeyword => throw new Exception("elif can be only used after a previous condition!"),
+            TokenType.ElseKeyword => throw new Exception("else can be only used after a previous condition!"),
 
             _ => ParseExpression(),
         };
@@ -205,13 +207,19 @@ public static class Parser
 
         ifStat.condition = ParseExpression();
         Expect(TokenType.RightArrowOperator, "Expected right arow after conditional expression and before the conditioned statement!");
-        ifStat.result = ParseStatement();
+
+        // get the conditioned statements
+        if (Current().type == TokenType.LeftBracketChar)
+            ifStat.result = ParseScope();
+        else
+            ifStat.result = ParseStatement();
+
 
         while (Current().type == TokenType.LineFeed) Eat();
 
         if (Current().type == TokenType.ElifKeyword)
             ifStat.elseStatement = ParseElifStatement();
-        
+
         else if (Current().type == TokenType.ElseKeyword)
             ifStat.elseStatement = ParseElseStatement();
 
@@ -226,13 +234,19 @@ public static class Parser
 
         elseStat.condition = ParseExpression();
         Expect(TokenType.RightArrowOperator, "Expected right arow after conditional expression and before the conditioned statement!");
-        elseStat.result = ParseStatement();
+
+        // get the conditioned statements
+        if (Current().type == TokenType.LeftBracketChar)
+            elseStat.result = ParseScope();
+        else
+            elseStat.result = ParseStatement();
+
 
         while (Current().type == TokenType.LineFeed) Eat();
 
         if (Current().type == TokenType.ElifKeyword)
             elseStat.elseStatement = ParseElifStatement();
-        
+
         else if (Current().type == TokenType.ElseKeyword)
             elseStat.elseStatement = ParseElseStatement();
 
@@ -280,7 +294,9 @@ public static class Parser
     {
         var left = ParseAdditiveExpression();
 
-        while (Current().type == TokenType.EqualOperator || Current().type == TokenType.UnEqualOperator)
+        while (Current().type == TokenType.EqualOperator || Current().type == TokenType.UnEqualOperator
+            || Current().type == TokenType.LeftAngleChar || Current().type == TokenType.RightAngleChar
+            || Current().type == TokenType.LessEqualsOperator || Current().type == TokenType.GreatEqualsOperator)
         {
             left = new BinaryExpressionNode()
             {

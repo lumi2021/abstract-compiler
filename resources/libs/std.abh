@@ -8,9 +8,8 @@
     best way to the targeting platform.
 
 ###
-namespace Std.Console
-{
 
+namespace Std.Console {
     func void Write(i8 value)
     func void Write(i16 value)
     func void Write(i32 value)
@@ -23,7 +22,7 @@ namespace Std.Console
 
     func void Write(f32 value)
     func void Write(f64 value)
-    
+        
     func void Write(string content)
 
     func void Log(i8 value)
@@ -40,29 +39,23 @@ namespace Std.Console
     func void Log(f64 value)
 
     func void Log(string content)
-    
+        
     func string Read()
-
 }
 
-namespace Std.Type.String
-{
+namespace Std.Type.String {
     func bool Equals(string a, string b)
 }
 
-namespace Std.Type.Casting
-{
+namespace Std.Type.Casting {
     func i8 Cast_i8(string value)
     func i16 Cast_i16(string value)
     func i32 Cast_i32(string value)
     func i64 Cast_i64(string value)
 }
 
-namespace Std.Memory
-{
-
+namespace Std.Memory {
     func i64 GenArray(i32 len)
     func string GenString(i32 len)
     func string LoadString(string source)
-    
 }

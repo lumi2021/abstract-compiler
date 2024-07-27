@@ -149,6 +149,7 @@ public enum ConditionMethod : byte
     LesserEqual,
 
     Equal,
+    Unequal,
 
     True,
     False,

@@ -22,8 +22,9 @@ public static class Lexer
             TokenType.EqualsChar,
 
             TokenType.RightArrowOperator, TokenType.LessEqualsOperator,
-            TokenType.EqualOperator, TokenType.GreatEqualsOperator,
-            TokenType.UnEqualOperator,
+            TokenType.EqualOperator, TokenType.UnEqualOperator,
+            TokenType.LeftAngleChar, TokenType.RightAngleChar,
+            TokenType.LessEqualsOperator, TokenType.GreatEqualsOperator,
 
             TokenType.AddAssigin, TokenType.MulAssigin,
             TokenType.SubAssigin, TokenType.DivAssigin
@@ -143,6 +144,11 @@ public static class Lexer
                 tokens.Add(Tokenize(c, TokenType.LeftBracketChar, i));
             else if (c == '}')
                 tokens.Add(Tokenize(c, TokenType.RightBracketChar, i));
+
+            else if (c == '<')
+                tokens.Add(Tokenize(c, TokenType.LeftAngleChar, i));
+            else if (c == '>')
+                tokens.Add(Tokenize(c, TokenType.RightAngleChar, i));
 
             else if (c == '+')
                 tokens.Add(Tokenize(c, TokenType.CrossChar, i));

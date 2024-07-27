@@ -3,6 +3,7 @@ using Compiler.CodeProcessing.Scripts;
 using Compiler.Util.Compilation;
 using OpCodes = Compiler.Util.Compilation.NASMBuilder.OpCodes;
 using Reg = Compiler.Util.Compilation.NASMBuilder.Register;
+using Arg = Compiler.Util.Compilation.NASMBuilder.Argument;
 
 namespace Compiler.CodeProcessing.Compiling;
 
@@ -15,7 +16,7 @@ public class NasmCompiler : BaseCompiler
     // kinds:
     //    0 -> literal/constant;
     //    1 -> local variable;
-    //    2 -> returned (in accumulator);
+    //    2 -> returned (or in some register);
 
     public override void Compile(CompilationRoot program, string oPath, string oFile)
     {
@@ -178,13 +179,17 @@ public class NasmCompiler : BaseCompiler
         if (method.LocalMemorySize > 0)
             builder.Emit(OpCodes.Enter(method.LocalMemorySize));
 
+        Stack<NASMBuilder.AsmJumpBridge> ifStack = new();
+
         foreach (var i in method.interLang)
         {
             switch (i.instruction)
             {
-                case IntermediateAssembyLanguage.Instruction.Nop: break;
-                case IntermediateAssembyLanguage.Instruction.LdConst:
+                case IntermediateAssembyLanguage.Instruction.Nop:
+                    builder.Emit(OpCodes.Nop());
+                    break;
 
+                case IntermediateAssembyLanguage.Instruction.LdConst:
                     if (i.parameters[0] == "str")
                     {
                         string lbl = builder.StoreString(i.parameters[1]);
@@ -235,10 +240,6 @@ public class NasmCompiler : BaseCompiler
 
                     int parametersCount = referedMethod.Parameters.Count;
 
-                    //builder.Emit(OpCodes.Unknown($"calling {referedMethod.name} "
-                    //+ $"({string.Join(", ", referedMethod.Parameters.Select(p => p.type.ToAsmString()))})"
-                    //+ $" -> {referedMethod.returnType.ToAsmString()}"));
-
                     if (parametersCount > 0)
                     {
                         builder.Emit(OpCodes.Sub(Reg.StackPointer, referedMethod.ParametersMemorySize));
@@ -248,51 +249,67 @@ public class NasmCompiler : BaseCompiler
                         {
                             var paramSize = referedMethod.Parameters[paramIdx].type.Value.Size;
 
-                            var stackValue = vstack.Pop();
-                            if (stackValue.kind == 0) // CONSTANT
+                            var stackTop = vstack.Pop();
+                            if (stackTop.kind == 0) // CONSTANT
                             {
-                                if (stackValue.type.StartsWith('i') || stackValue.type.StartsWith('u'))
+                                if (stackTop.type.StartsWith('i') || stackTop.type.StartsWith('u'))
                                 {
-                                    builder.Emit(OpCodes.Mov(long.Parse(stackValue.value),
-                                    new NASMBuilder.Argument(paramSize, pbOffset)));
+                                    builder.Emit(OpCodes.Mov(long.Parse(stackTop.value),
+                                    new Arg(paramSize, pbOffset)));
                                 }
-                                else if (stackValue.type == "str")
+                                else if (stackTop.type == "str")
                                 {
-                                    builder.Emit(OpCodes.Mov(stackValue.value, Reg.Acumulator_x32));
+                                    builder.Emit(OpCodes.Mov(stackTop.value, Reg.Acumulator_x32));
                                     builder.Emit(OpCodes.Mov(Reg.Acumulator_x32,
-                                    new NASMBuilder.Argument(paramSize, pbOffset)));
+                                    new Arg(paramSize, pbOffset)));
                                 }
-                                else builder.Emit(OpCodes.Unknown($"type {stackValue.type} is still not supported! sowy! ;3"));
+                                else builder.Emit(OpCodes.Unknown($"type {stackTop.type} is still not supported! sowy! ;3"));
                             }
 
-                            if (stackValue.kind == 1) // LOCAL
+                            else if (stackTop.kind == 1) // LOCAL
                             {
-                                builder.Emit(OpCodes.Mov(GetLocal(method, int.Parse(stackValue.value)), Reg.Acumulator_x32));
-                                builder.Emit(OpCodes.Mov(Reg.Acumulator_x32,
-                                    new NASMBuilder.Argument(paramSize, pbOffset)));
+                                builder.Emit(OpCodes.Mov(GetLocal(method, int.Parse(stackTop.value)), Reg.Acumulator_x32));
+                                builder.Emit(OpCodes.Mov(Reg.Acumulator_x32, new Arg(paramSize, pbOffset)));
                             }
-                            // ACCUMULATOR
+                            else if (stackTop.kind == 2) // Register
+                            {
+                                builder.Emit(OpCodes.Mov(Reg.Acumulator_x32, new Arg(paramSize, pbOffset)));
+                            }
 
                             pbOffset += paramSize;
                         }
                     }
 
                     builder.Emit(OpCodes.Call(ConvertIlToNasmLabel(i.parameters[1])));
-                    if (i.parameters[0] != "void") vstack.Push((2, i.parameters[0], "Accumulator"));
+                    if (i.parameters[0] != "void") vstack.Push((2, i.parameters[0], "A"));
 
                     break;
 
                 case IntermediateAssembyLanguage.Instruction.Conv:
                     
-                    var stackTop = vstack.Pop();
+                    var stackValue = vstack.Pop();
 
-                    if (stackTop.type == "str") {
+                    if (stackValue.type == "str") {
+                        builder.Emit(OpCodes.Sub(Reg.StackPointer, 4));
+
+                        if (stackValue.kind == 1) // LOCAL
+                        {
+                            builder.Emit(OpCodes.Mov(GetLocal(method, int.Parse(stackValue.value)), Reg.Acumulator_x32));
+                            builder.Emit(OpCodes.Mov(Reg.Acumulator_x32, new Arg(4, 0)));
+                        }
+                        else if (stackValue.kind == 2) // Register
+                        {
+                            builder.Emit(OpCodes.Mov(Reg.Acumulator_x32, new Arg(4, 0)));
+                        }
+                        else throw new NotImplementedException();
+
                         builder.Emit(OpCodes.Call($"Std.Type.Casting@Cast_{i.parameters[0]}?str"));
+                        vstack.Push((2, "str", "A"));
                     }
                     else
                     {
-                        builder.Emit(OpCodes.Unknown($"Conversions from {stackTop.type} are still not implemented!"));
-                        vstack.Push(stackTop);
+                        builder.Emit(OpCodes.Unknown($"Conversions from {stackValue.type} are still not implemented!"));
+                        vstack.Push(stackValue);
                     }
 
                     break;
@@ -324,6 +341,90 @@ public class NasmCompiler : BaseCompiler
                     else builder.Emit(OpCodes.Unknown($"Add not implemented to {i.parameters[0]}! sowy! ;3"));
 
                     break;
+
+                case IntermediateAssembyLanguage.Instruction.If:
+
+                    var jmpBridge = new NASMBuilder.AsmJumpBridge();
+                    ifStack.Push(jmpBridge);
+
+                    var stkVal = vstack.Pop();
+
+                    // Check the condition
+                    switch (i.parameters[0])
+                    {
+                        case "True":
+                            if (stkVal.kind == 0)
+                            {
+                                builder.Emit(OpCodes.Mov(stkVal.value == "True" ? 1 : 0, Reg.Acumulator_x32));
+                                builder.Emit(OpCodes.Cmp(Reg.Acumulator_x32, 1));
+                            }
+
+                            builder.Emit(OpCodes.JumpIfNotEquals(jmpBridge));
+                            break;
+
+                        case "False":
+                            if (stkVal.kind == 0)
+                            {
+                                builder.Emit(OpCodes.Mov(stkVal.value == "True" ? 1 : 0, Reg.Acumulator_x32));
+                                builder.Emit(OpCodes.Cmp(Reg.Acumulator_x32, 0));
+                            }
+
+                            builder.Emit(OpCodes.JumpIfNotEquals(jmpBridge));
+                            break;
+
+                        case "Equal":
+                            if (stkVal.kind == 0)
+                            {
+                                builder.Emit(OpCodes.Mov(stkVal.value, Reg.Acumulator_x32));
+                                builder.Emit(OpCodes.Cmp(Reg.Acumulator_x32, long.Parse(i.parameters[1])));
+                            }
+                            else if (stkVal.kind == 1)
+                            {
+                                builder.Emit(OpCodes.Mov(GetLocal(method, int.Parse(stkVal.value)), Reg.Acumulator_x32));
+                                builder.Emit(OpCodes.Cmp(Reg.Acumulator_x32, long.Parse(i.parameters[1])));
+                            }
+
+                            builder.Emit(OpCodes.JumpIfNotEquals(jmpBridge));
+                            break;
+
+                        case "Greater":
+                            if (stkVal.kind == 0)
+                            {
+                                builder.Emit(OpCodes.Mov(stkVal.value, Reg.Acumulator_x32));
+                                builder.Emit(OpCodes.Cmp(Reg.Acumulator_x32, long.Parse(i.parameters[1])));
+                            }
+                            else if (stkVal.kind == 1)
+                            {
+                                builder.Emit(OpCodes.Mov(GetLocal(method, int.Parse(stkVal.value)), Reg.Acumulator_x32));
+                                builder.Emit(OpCodes.Cmp(Reg.Acumulator_x32, long.Parse(i.parameters[1])));
+                            }
+
+                            builder.Emit(OpCodes.JumpIfLessEqual(jmpBridge));
+                            break;
+
+                        default:
+                            builder.Emit(OpCodes.Unknown($"{i}"));
+                            break;
+                    }
+                    
+                    break;
+
+                case IntermediateAssembyLanguage.Instruction.Else:
+                    var jmpb = ifStack.Pop();
+                    var njmpb = new NASMBuilder.AsmJumpBridge();
+
+                    builder.Emit(OpCodes.Jump(njmpb));
+                    jmpb.SetBridge(builder.GetNextInstructionIndex());
+
+                    ifStack.Push(njmpb);
+
+                    break;
+
+                case IntermediateAssembyLanguage.Instruction.EndIf:
+                    var a = ifStack.Pop();
+                    a.SetBridge(builder.GetNextInstructionIndex());
+                    break;
+
 
                 default:
                     builder.Emit(OpCodes.Unknown($"{i}"));
@@ -392,6 +493,7 @@ public class NasmCompiler : BaseCompiler
     }
 
     private string ConvertIlToNasmLabel(string src) => src.Replace(':', '@');
+
 
     #endregion
 
