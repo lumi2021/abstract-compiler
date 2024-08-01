@@ -3,6 +3,7 @@ using Compiler.CodeProcessing.CompilationStructuring;
 using Compiler.CodeProcessing.Exeptions;
 using Compiler.CodeProcessing.IntermediateAssembyLanguage;
 using Compiler.Util.Compilation;
+using System.Collections.Generic;
 
 namespace Compiler.CodeProcessing.Evaluating;
 
@@ -118,41 +119,45 @@ public static class Evaluation
                 {
                     if (@ass.assigne is IdentifierNode @ident)
                     {
-                        var referingType = (PrimitiveType)@ident.refersToType.Value;
 
-                        if (@ass.value is NumericLiteralNode @num)
+                        var referingType = @ident.refersToType.Value;
+
+                        if (referingType is PrimitiveType @primitiveReferingType)
                         {
-                            
-                            long value = @num.value;
-
-                            // check for mismatch type
-                            IsNumericIntegerType(referingType);
-
-                            // check for overflow
-                            if (value < referingType.MinValue)
+                            if (@ass.value is NumericLiteralNode @num)
                             {
-                                // FIXME
-                                Console.WriteLine($"Warning! the value {value} is lower than the minimum store capacity of an "
-                                + $"{referingType}. It will calse an overflow making the resultant value be {referingType.MaxValue}!");
-                                @num.value = referingType.MaxValue;
+
+                                long value = @num.value;
+
+                                // check for mismatch type
+                                IsNumericIntegerType(referingType);
+
+                                // check for overflow
+                                if (value < @primitiveReferingType.MinValue)
+                                {
+                                    // FIXME
+                                    Console.WriteLine($"Warning! the value {value} is lower than the minimum store capacity of an "
+                                    + $"{@primitiveReferingType}. It will calse an overflow making the resultant value be {@primitiveReferingType.MaxValue}!");
+                                    @num.value = @primitiveReferingType.MaxValue;
+                                }
+                                else if (value > @primitiveReferingType.MaxValue)
+                                {
+                                    // FIXME
+                                    Console.WriteLine($"Warning! the value {value} is greater than the maximum store capacity of an "
+                                    + $"{@primitiveReferingType}. It will calsing an overflow making the resultant value be {@primitiveReferingType.MinValue}!");
+                                    @num.value = @primitiveReferingType.MinValue;
+                                }
                             }
-                            else if (value > referingType.MaxValue)
+
+                            if (@ass.value is FloatingLiteralNode @flt)
                             {
-                                // FIXME
-                                Console.WriteLine($"Warning! the value {value} is greater than the maximum store capacity of an "
-                                + $"{referingType}. It will calsing an overflow making the resultant value be {referingType.MinValue}!");
-                                @num.value = referingType.MinValue;
+
+                                double value = @flt.value;
+
+                                // check for mismatch type
+                                IsNumericFloatingType(referingType);
+
                             }
-                        }
-
-                        if (@ass.value is FloatingLiteralNode @flt)
-                        {
-                            
-                            double value = @flt.value;
-
-                            // check for mismatch type
-                            IsNumericFloatingType(referingType);
-
                         }
 
                         else EvaluateExpressionType(@ass.value);
@@ -175,6 +180,9 @@ public static class Evaluation
                     {
                         var t1 = EvaluateExpressionType(@assigin.assigne);
                         var t2 = EvaluateExpressionType(@assigin.value);
+
+                        Console.WriteLine($"{t1} ({t1.Value.GetType()})");
+                        Console.WriteLine($"{t2} ({t2.Value.GetType()})");
 
                         if (t1 != t2)
                         {
@@ -603,6 +611,12 @@ public static class Evaluation
             }
         }
 
+        else if (exp is CollectionExpressionNode @collection)
+        {
+            foreach (var i in collection.values)
+                EvaluateExpressionIdentifiers(i, mt, ns, decVars);
+        }
+
         else if (
             exp is StringLiteralNode ||
             exp is BooleanLiteralNode ||
@@ -631,7 +645,7 @@ public static class Evaluation
     {
         if (exp is MethodCallNode @call)
             return @call.target.refersToType;
-        
+
         else if (exp is StringLiteralNode) return new TypeItem(PrimitiveTypeList.String);
         else if (exp is NumericLiteralNode) return new TypeItem(PrimitiveTypeList.__Generic__Number);
         else if (exp is FloatingLiteralNode) return new TypeItem(PrimitiveTypeList.__Generic__Floating);
@@ -654,6 +668,9 @@ public static class Evaluation
                 }
             }
         }
+
+        else if (exp is CollectionExpressionNode @collection)
+            return new TypeItem(new ArrayType(new PrimitiveType(PrimitiveTypeList.__Generic__Collection)));
 
         throw new NotImplementedException($"{exp.GetType().Name} is still not supported.");
     }
@@ -902,13 +919,37 @@ public static class Evaluation
             var typeToConvert = new TypeItem(@tCast.type);
             var leftType = EvaluateExpressionType(tCast.expression);
 
-            rist.AddRange(ExpressionToAsm(@tCast.expression));
+            Console.WriteLine(typeToConvert.GetType());
+            Console.WriteLine(typeToConvert.Value.GetType());
 
-            if (expectedType! != typeToConvert || leftType != typeToConvert)
+            if (typeToConvert.Value is not ArrayType)
             {
-                string IlTypeString = new TypeItem(@tCast.type).Value.ToIlString();
-                rist.Add(OpCode.Conv(IlTypeString));
+                rist.AddRange(ExpressionToAsm(@tCast.expression));
+
+                if (expectedType! != typeToConvert || leftType != typeToConvert)
+                {
+                    string IlTypeString = new TypeItem(@tCast.type).Value.ToIlString();
+                    rist.Add(OpCode.Conv(IlTypeString));
+                }
             }
+
+            else
+                rist.AddRange(ExpressionToAsm(@tCast.expression, typeToConvert));
+
+        }
+
+        else if (exp is CollectionExpressionNode @collection)
+        {
+            var arrayType = (ArrayType)expectedType!.Value;
+
+            rist.Add(OpCode.CrtArray(arrayType.type.ToIlString(), collection.Length));
+
+            for (var i = 0; i < collection.Length; i++)
+            {
+                rist.AddRange(ExpressionToAsm(collection.values[i], expectedType));
+                rist.Add(OpCode.SetIndex(i));
+            }
+
         }
 
         else throw new NotImplementedException(exp.GetType().Name);

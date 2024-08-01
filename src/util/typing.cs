@@ -55,7 +55,7 @@ public static class Typing
         };
     }
 
-    // primitives
+    // only for primitives
     public static int SizeOf(PrimitiveTypeList type)
     {
         return type switch
@@ -168,6 +168,7 @@ public static class Typing
 
         PrimitiveTypeList.Void or
         PrimitiveTypeList.String or
+        PrimitiveTypeList.__Generic__Collection or
         PrimitiveTypeList.Pointer => PrimitiveTypeKind.Pointer,
 
         _ => throw new NotImplementedException()
@@ -176,19 +177,14 @@ public static class Typing
 
 public interface ILangType
 {
-    public TypeDefKind ReferingTo { get; }
     public int Size { get; }
     public string ToIlString();
 }
 
-public readonly struct PrimitiveType(PrimitiveTypeList value, TypeDefKind refTo) : ILangType{
+public readonly struct PrimitiveType(PrimitiveTypeList value) : ILangType {
 
     private readonly PrimitiveTypeList _value = value;
     public PrimitiveTypeList Value => _value;
-
-    private readonly TypeDefKind _referingTo = refTo;
-
-    public TypeDefKind ReferingTo => _referingTo;
     public int Size => Typing.SizeOf(_value);
 
     public long MinValue => Typing.MinValueOf(_value);
@@ -197,21 +193,22 @@ public readonly struct PrimitiveType(PrimitiveTypeList value, TypeDefKind refTo)
     public PrimitiveTypeKind Kind => Typing.KindOf(_value);
 
     public string ToIlString() => Typing.TypeAsILString(_value);
-    public override string ToString()
-    {
-        var str = "";
-
-        if (_referingTo == TypeDefKind.Reference) str += "*";
-        if (_referingTo == TypeDefKind.Pointer) str += "&";
-
-        str += $"{_value}";
-
-        return str;
-    }
+    public override string ToString() => $"{_value}";
 
 }
 
 //public struct ComplexType : ILangType {}
+
+public readonly struct ArrayType (ILangType type) : ILangType
+{
+
+    public readonly ILangType type = type;
+
+    public int Size => 4;
+
+    public string ToIlString() => $"arr#{type.ToIlString()}";
+    public override string ToString() => $"[]{type}";
+}
 
 public enum TypeDefKind : byte
 {
@@ -258,6 +255,7 @@ public enum PrimitiveTypeList : byte
     // generic
     __Generic__Number,
     __Generic__Floating,
+    __Generic__Collection,
 
 }
 

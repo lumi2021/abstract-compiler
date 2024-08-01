@@ -34,7 +34,7 @@ public class InvalidImplicitCastException(TypeItem ta, TypeItem tb) : Evaluation
     readonly TypeItem t2 = tb;
 
     public override string ToString()
-        => $"Invalid implicit casting betweeen types {t1} and {t2}";
+        => $"Invalid implicit casting between types {t1} and {t2}";
 }
 
 public abstract class NotFoundException() : EvaluationException() {}

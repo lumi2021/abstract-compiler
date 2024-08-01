@@ -255,17 +255,17 @@ public class TypeItem : CompStruct
 
     public TypeItem(TypeNode referTo) : base(referTo)
     {
-        PrimitiveTypeNode refNode = (referTo as PrimitiveTypeNode)!;
-
-        ILangType t = new PrimitiveType(refNode.value, TypeDefKind.Value);
-
-        _type = t;
+        _type = referTo.GetLangType();
     }
     public TypeItem(PrimitiveTypeList type) : base(null!)
     {
-        ILangType t = new PrimitiveType(type, TypeDefKind.Value);
+        ILangType t = new PrimitiveType(type);
 
         _type = t;
+    }
+    public TypeItem(ILangType type) : base(null!)
+    {
+        _type = type;
     }
 
     public override string ToString() => _type.ToString() ?? "null";
@@ -292,16 +292,26 @@ public class TypeItem : CompStruct
 
     public static bool IsAssignableTo(TypeItem a, TypeItem b)
     {
+
+        //Console.WriteLine($"- > {a}");
+        //Console.WriteLine($"- > {b}");
+
         if (a == b) return true;
 
         if (a.Value is PrimitiveType @prim1 && b.Value is PrimitiveType @prim2)
         {
-            if (@prim2.Kind == PrimitiveTypeKind.IntegerNumeric)
+            if (prim2.Value == PrimitiveTypeList.__Generic__Collection)
+                return true;
+
+            else if (@prim2.Kind == PrimitiveTypeKind.IntegerNumeric)
                 return @prim1.Kind == @prim2.Kind && @prim1.MinValue >= @prim2.MinValue && @prim1.MaxValue <= @prim2.MaxValue;
 
             else if (@prim2.Kind == PrimitiveTypeKind.FloatingNumeric)
                 return @prim1.Kind == PrimitiveTypeKind.FloatingNumeric || @prim1.Kind == PrimitiveTypeKind.IntegerNumeric;
         }
+
+        else if (a.Value is ArrayType @array1 && b.Value is ArrayType @array2)
+            return new TypeItem(array2.type).IsAssignableTo(new(array1.type));
 
         return false;
     }

@@ -14,10 +14,15 @@ public static class OpCode
     public static IntermediateInstruction LdConst_float(string type, double value) => new(Instruction.LdConst, [type, value.ToString(CultureInfo.InvariantCulture)]);
     public static IntermediateInstruction LdConst_bool(bool value) => new(Instruction.LdConst, ["bool", value.ToString()]);
 
+    public static IntermediateInstruction CrtArray(string type, int length) => new(Instruction.CrtArray, [type, length.ToString()]);
+
     public static IntermediateInstruction SetLocal(int id) => new(Instruction.SetLocal, [id.ToString()]);
     public static IntermediateInstruction SetLocal(LocalRef lr) => new(Instruction.SetLocal, [lr.index.ToString()]);
     public static IntermediateInstruction GetLocal(int id) => new(Instruction.GetLocal, [id.ToString()]);
     public static IntermediateInstruction GetLocal(LocalRef lr) => new(Instruction.GetLocal, [lr.index.ToString()]);
+
+    public static IntermediateInstruction SetIndex(int idx) => new(Instruction.SetIndex, [idx.ToString()]);
+    public static IntermediateInstruction GetIndex(string type, int idx) => new(Instruction.GetIndex, [type, idx.ToString()]);
 
     public static IntermediateInstruction Add(string type) => new(Instruction.Add, [type]);
     public static IntermediateInstruction Sub(string type) => new(Instruction.Sub, [type]);
@@ -62,7 +67,12 @@ public readonly struct IntermediateInstruction(Instruction instruction, string[]
             Instruction.GetField        => "getField.{0}",
             Instruction.GetLocal        => "getLocal.{0}",
 
+            Instruction.SetIndex        => "setIndex",
+            Instruction.GetIndex        => "getIndex.{0}",
+
             Instruction.LdConst         => parameters[0] != "str" ? "ldConst.{0}" : "ldConst.{0} \"{1}\"",
+
+            Instruction.CrtArray        => "crtArray.{0}",
 
             Instruction.Add             => "add.{0}",
             Instruction.Sub             => "sub.{0}",
@@ -111,11 +121,15 @@ public enum Instruction : byte
 
     SetField,
     SetLocal,
+    SetIndex,
 
     GetField,
     GetLocal,
+    GetIndex,
 
     LdConst,
+    
+    CrtArray,
 
     Add,
     Sub,

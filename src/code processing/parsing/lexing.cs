@@ -144,6 +144,10 @@ public static class Lexer
                 tokens.Add(Tokenize(c, TokenType.LeftBracketChar, i));
             else if (c == '}')
                 tokens.Add(Tokenize(c, TokenType.RightBracketChar, i));
+            else if (c == '[')
+                tokens.Add(Tokenize(c, TokenType.LeftSquareBracketChar, i));
+            else if (c == ']')
+                tokens.Add(Tokenize(c, TokenType.RightSquareBracketChar, i));
 
             else if (c == '<')
                 tokens.Add(Tokenize(c, TokenType.LeftAngleChar, i));
@@ -405,6 +409,9 @@ public enum TokenType {
 
     LeftBracketChar,        // {
     RightBracketChar,       // }
+    
+    LeftSquareBracketChar,  // {
+    RightSquareBracketChar, // }
 
     LeftAngleChar,          // <
     RightAngleChar,         // >

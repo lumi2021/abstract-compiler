@@ -435,6 +435,10 @@ public static class Parser
                 Expect(TokenType.RightParenthesisChar, $"Unexpected token! Expected Closing parenthesis.");
                 return val;
 
+            // Collection/Array expression
+            case TokenType.LeftSquareBracketChar:
+                return ParseArray();
+
             default: // unespected expression
                 currentSrc.ThrowError(new UnexpectedTokenException(tk));
                 Eat();
@@ -442,6 +446,30 @@ public static class Parser
         }
     }
     
+    private static CollectionExpressionNode ParseArray()
+    {
+
+        Expect(TokenType.LeftSquareBracketChar, "Left square braket character expected to open the collection!");
+
+        var collection = new CollectionExpressionNode();
+
+        if (Current().type != TokenType.RightSquareBracketChar)
+        {
+            do
+            {
+                collection.values.Add(ParseExpression());
+
+                if (Current().type == TokenType.RightSquareBracketChar) break;
+            }
+            while (Current().type == TokenType.CommaChar);
+        }
+
+        Expect(TokenType.RightSquareBracketChar, "Right square braket character expected to close the collection!");
+
+        return collection;
+
+    }
+
     private static MethodCallNode ParseMethodCall(Identifier symbol)
     {
         Expect(TokenType.LeftPerenthesisChar, "Unexpected token! Expected oppening parenthesis!");
@@ -529,6 +557,18 @@ public static class Parser
     #region Other parsings
     private static TypeNode ParseType()
     {
+        // check modfiers
+        if (Current().type == TokenType.LeftSquareBracketChar)
+        {
+            Eat();
+            Expect(TokenType.RightSquareBracketChar, "Cosing braket expected to declarate an array type!");
+
+            return new ArrayTypeNode()
+            {
+                value = ParseType()
+            };
+        }
+
         var token = Expect(TokenType.TypeKeyword, "Type expected!");
 
         #region switch
@@ -748,7 +788,7 @@ public static class AstWriter
             return @floatingLiteral.ToString();
         else if (expression is StringLiteralNode @stringLiteral)
             return $"\"{@stringLiteral.value}\"";
-        
+
         else if (expression is BinaryExpressionNode @binaryExp)
             return ProcessBinaryNode(@binaryExp);
         else if (expression is UnaryExpressionNode @unaryExp)
@@ -756,18 +796,21 @@ public static class AstWriter
 
         else if (expression is TypeCastingExpressionNode @typeCast)
             return $"{ProcessExpression(@typeCast.expression)} as {@typeCast.type}";
-        
+
         else if (expression is ReferenceModifier @refMod)
             return @refMod.ToString();
-        
+
         else if (expression is MethodCallNode @methodCall)
             return @methodCall.ToString();
-        
+
         else if (expression is IdentifierNode @identifier)
             return @identifier.symbol.ToString();
-        
+
         else if (expression is BooleanLiteralNode @bool)
             return @bool.value ? "true" : "false";
+
+        else if (expression is CollectionExpressionNode @collection)
+            return $"[{string.Join(", ", collection.values)}]";
 
         else throw new NotImplementedException(expression.GetType().Name);
     }

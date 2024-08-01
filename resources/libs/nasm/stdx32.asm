@@ -178,6 +178,17 @@ Std.Type.Casting@Cast_i32?str:
 
 Std.Type.Casting@Cast_i64?str:
 Std.Memory@GenArray?i32:
+    mov EAX, DWORD[ESP + 4] ; get index
+    add EAX, 4 ; add length
+
+    push EAX
+    call _malloc
+    add ESP, 4
+
+    ; set the initial length
+    mov DWORD[EAX + 0], EAX
+
+    ret
 
 Std.Memory@GenString?i32:
     mov EAX, DWORD[ESP + 4]
@@ -200,7 +211,9 @@ Std.Memory@GenString?i32:
         add ESP, 4
         mov EAX, 0
     .ok:
-        ret
+        pop EBX
+        add ESP, 4
+        jmp EBX
 
 Std.Memory@LoadString?str:
 

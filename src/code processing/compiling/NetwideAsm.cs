@@ -1,9 +1,11 @@
 using Compiler.CodeProcessing.CompilationStructuring;
 using Compiler.CodeProcessing.Scripts;
 using Compiler.Util.Compilation;
+
 using OpCodes = Compiler.Util.Compilation.NASMBuilder.OpCodes;
 using Reg = Compiler.Util.Compilation.NASMBuilder.Register;
 using Arg = Compiler.Util.Compilation.NASMBuilder.Argument;
+using Idx = Compiler.Util.Compilation.NASMBuilder.Index;
 
 namespace Compiler.CodeProcessing.Compiling;
 
@@ -230,6 +232,19 @@ public class NasmCompiler : BaseCompiler
 
                     break;
 
+
+                case IntermediateAssembyLanguage.Instruction.CrtArray:
+
+                    int arraySizeInBytes = int.Parse(i.parameters[1]) * GetIlTypeSize(i.parameters[0]);
+
+                    builder.Emit(OpCodes.Push(arraySizeInBytes));
+                    builder.Emit(OpCodes.Call("Std.Memory@GenArray?i32"));
+
+                    vstack.Push((2, "arr#" + i.parameters[0], "A"));
+
+                    break;
+
+
                 case IntermediateAssembyLanguage.Instruction.CallStatic:
 
                     var referedMethod = FindMethod(i.parameters[1]);
@@ -250,6 +265,7 @@ public class NasmCompiler : BaseCompiler
                             var paramSize = referedMethod.Parameters[paramIdx].type.Value.Size;
 
                             var stackTop = vstack.Pop();
+
                             if (stackTop.kind == 0) // CONSTANT
                             {
                                 if (stackTop.type.StartsWith('i') || stackTop.type.StartsWith('u'))
@@ -265,7 +281,6 @@ public class NasmCompiler : BaseCompiler
                                 }
                                 else builder.Emit(OpCodes.Unknown($"type {stackTop.type} is still not supported! sowy! ;3"));
                             }
-
                             else if (stackTop.kind == 1) // LOCAL
                             {
                                 builder.Emit(OpCodes.Mov(GetLocal(method, int.Parse(stackTop.value)), Reg.Acumulator_x32));
@@ -494,6 +509,22 @@ public class NasmCompiler : BaseCompiler
 
     private string ConvertIlToNasmLabel(string src) => src.Replace(':', '@');
 
+    private int GetIlTypeSize(string type) => type switch {
+
+        "u8" or
+        "i8" => 1,
+
+        "u16" or
+        "i16" => 2,
+
+        "u32" or
+        "i32" => 4,
+
+        "u64" or
+        "i64" => 8,
+
+        _ => 0
+    };
 
     #endregion
 

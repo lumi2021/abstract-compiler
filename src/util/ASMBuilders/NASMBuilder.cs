@@ -194,7 +194,11 @@ public class NASMBuilder
         public static IAsmInstruction Enter(uint size)                       => new Op_Enter(size);
         public static IAsmInstruction Leave()                                => new Op_Leave();
 
+        public static IAsmInstruction Push(long value)                       => new Op_Push_Numeric(value);
+
         public static IAsmInstruction Call(string method)                    => new Op_Call(method);
+
+        public static IAsmInstruction Mov(Index offset, long value)          => new Op_Mov_Const_To_Off(offset, value);
 
         public static IAsmInstruction Mov(long value, Register register)     => new Op_Mov_Const_To_Reg(register, value);
         public static IAsmInstruction Mov(long value, LocalVariable local)   => new Op_Mov_Const_To_Local(local, value);
@@ -254,7 +258,15 @@ public class NASMBuilder
             public string ToAsmStruction() => "LEAVE";
             public string ToAsmParameter() => $"";
         }
-        
+
+        private readonly struct Op_Push_Numeric(long value) : IAsmInstruction
+        {
+            private readonly long _value = value;
+
+            public string ToAsmStruction() => "PUSH";
+            public string ToAsmParameter() => $"{_value:X}";
+        }
+
         private readonly struct Op_Call(string target) : IAsmInstruction
         {
             private readonly string _target = target;
@@ -424,6 +436,15 @@ public class NASMBuilder
             public string ToAsmParameter() => $"{_to}, {Reg2String(_from)}";
         }
         
+        private readonly struct Op_Mov_Const_To_Off(Index offset, long value) : IAsmInstruction
+        {
+            private readonly Index _to = offset;
+            private readonly long _from = value;
+
+            public string ToAsmStruction() => "MOV";
+            public string ToAsmParameter() => $"{_to}, 0x{_from:X}";
+        }
+        
         private readonly struct Op_Mov_String_To_Reg(Register reg, string str) : IAsmInstruction
         {
             private readonly Register _to = reg;
@@ -559,6 +580,14 @@ public class NASMBuilder
         private readonly int _byteOffset = paramOff;
         private readonly NASMDataSize _size = (NASMDataSize)size;
         public override string ToString() => $"{_size.ToString().ToUpper()}[ESP + {_byteOffset}]";
+    }
+    
+    public readonly struct Index (int size, Register ptr, int offset)
+    {
+        private readonly NASMDataSize _size = (NASMDataSize)size;
+        private readonly int _byteOffset = offset;
+        private readonly Register _reg = ptr;
+        public override string ToString() => $"{_size.ToString().ToUpper()}[{Reg2String(_reg)} + {_byteOffset}]";
     }
 
     private static string Reg2String(Register reg) => reg switch

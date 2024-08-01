@@ -227,6 +227,16 @@ public class TypeCastingExpressionNode : ExpressionNode
 }
 
 
+public class CollectionExpressionNode : ExpressionNode
+{
+
+    public List<ExpressionNode> values = [];
+    public int Length => values.Count;
+
+    public override string ToString() => $"[{string.Join(", ", values)}]";
+
+}
+
 public class IdentifierNode(TypeItem? type = null, int? local = null) : ExpressionNode
 {
 
@@ -320,15 +330,29 @@ public class ReferenceModifier : ExpressionNode
     public override string ToString() => $"{modifier.value}{expression}";
 }
 
-public abstract class TypeNode : ExpressionNode {}
+public abstract class TypeNode : ExpressionNode
+{
+    public abstract ILangType GetLangType();
+}
+public abstract class TypeModifierNode : TypeNode {}
 public class PrimitiveTypeNode : TypeNode
 {
     public PrimitiveTypeList value = PrimitiveTypeList.Void;
     override public string ToString() => $"{value}";
+
+    public override ILangType GetLangType() => new PrimitiveType(value);
 }
 public class ComplexTypeNode : TypeNode
 {
     //string identifier = "";
+    public override ILangType GetLangType() => null!;
+}
+
+public class ArrayTypeNode : TypeModifierNode
+{
+    public TypeNode value = null!;
+    public override ILangType GetLangType() => new ArrayType(value.GetLangType());
+    override public string ToString() => $"[]{value}";
 }
 
 
